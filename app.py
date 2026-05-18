@@ -562,26 +562,40 @@ def point_analysis(code, date):
         # 为每个窗口计算加权预测
         window_predictions = {}
         window_weights_display = {}
+        avg_samples = 0
         for win_name in ['d1', 'd3', 'd5', 'd10', 'd30']:
             win_data = weights_by_window.get(win_name, {})
             w_dict = win_data.get('weights', {}) if win_data else {}
             wagg = weighted_aggregate(indicator_results, w_dict)
+            
+            # 验证该窗口预测是否准确
+            actual_w = actual_windows.get(win_name, {})
+            win_acc = '--'
+            if wagg['prediction'] != '--' and actual_w.get('trend'):
+                mapping = {'看涨': '上涨', '看跌': '下跌', '震荡': '震荡'}
+                win_acc = '正确 ✅' if mapping.get(wagg['prediction']) == actual_w['trend'] else '错误 ❌'
+            
             window_predictions[win_name] = {
                 'prediction': wagg['prediction'],
                 'confidence': wagg['confidence'],
                 'buy_pct': wagg['buy_pct'],
                 'sell_pct': wagg['sell_pct'],
+                'neutral_pct': wagg['neutral_pct'],
+                'accuracy': win_acc,
             }
-            # 为每个窗口包装权重视图（用于前端表格）
+            # 为每个窗口包装权重视图
             indicators = win_data.get('indicators', {}) if win_data else {}
             window_weights_display[win_name] = {}
             for ind_id, v in indicators.items():
                 window_weights_display[win_name][ind_id] = {
                     'accuracy': v['accuracy'],
-                    'weight': round(v['weight'] * 100),  # 转百分比
+                    'weight': round(v['weight'] * 100, 2),  # 转百分比，保留2位
                     'samples': v['total'],
                     'correct': v['correct'],
                 }
+            # 记录平均样本数
+            if indicators:
+                avg_samples = max(v.get('total', 0) for v in indicators.values())
         
         # 默认展示 d5 窗口
         default_win = window_predictions.get('d5', window_predictions.get('d3', {}))
@@ -617,6 +631,7 @@ def point_analysis(code, date):
             },
             'window_predictions': window_predictions,
             'weights_by_window': window_weights_display,
+            'avg_samples': avg_samples,
             'comparison': comparison,
         })
     except Exception as e:
@@ -735,7 +750,7 @@ def compute_indicator_weights(klines, min_samples=30):
         for ind_id, win_stats in stats.items():
             s = win_stats[win_name]
             if s['total'] >= min_samples:
-                acc = round(s['correct'] / s['total'] * 100, 1)
+                acc = round(s['correct'] / s['total'] * 100, 2)
                 indicators[ind_id] = {
                     'accuracy': acc,
                     'correct': s['correct'],
@@ -771,6 +786,7 @@ def weighted_aggregate(indicator_results, weight_dict):
     """用权重字典 {ind_id: weight} 计算加权汇总评分。weight_dict 中的权重已归一化。"""
     buy_weight = 0.0
     sell_weight = 0.0
+    neutral_weight = 0.0
     total_weight = 0.0
     
     for r in indicator_results:
@@ -781,26 +797,31 @@ def weighted_aggregate(indicator_results, weight_dict):
             buy_weight += w
         elif r['prediction'] == '看跌':
             sell_weight += w
+        else:
+            neutral_weight += w
         total_weight += w
     
     if total_weight > 0:
         buy_pct = round(buy_weight / total_weight * 100)
         sell_pct = round(sell_weight / total_weight * 100)
+        neutral_pct = round(neutral_weight / total_weight * 100)
         
-        if buy_pct > 55:
-            agg_pred = '看涨'
-            agg_conf = buy_pct
-        elif sell_pct > 55:
-            agg_pred = '看跌'
-            agg_conf = sell_pct
-        else:
+        # 只有看多/看空差距 < 5pp 才判定震荡
+        if buy_pct == sell_pct or abs(buy_pct - sell_pct) < 5:
             agg_pred = '震荡'
             agg_conf = max(buy_pct, sell_pct)
+        elif buy_pct > sell_pct:
+            agg_pred = '看涨'
+            agg_conf = buy_pct
+        else:
+            agg_pred = '看跌'
+            agg_conf = sell_pct
     else:
         agg_pred = '--'
         agg_conf = 0
         buy_pct = 0
         sell_pct = 0
+        neutral_pct = 0
     
     return {
         'prediction': agg_pred,
@@ -809,6 +830,7 @@ def weighted_aggregate(indicator_results, weight_dict):
         'sell_weight': round(sell_weight, 2),
         'buy_pct': buy_pct,
         'sell_pct': sell_pct,
+        'neutral_pct': neutral_pct,
     }
 
 

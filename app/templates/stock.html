@@ -160,27 +160,78 @@
     let currentIndicator = 'vol';
     let klineData = [];
     let indicatorInfoCache = {};
+    let selectedDateIndex = -1;  // 当前选中日期的 index
+    let paData = null;          // 缓存点位分析数据
 
     // Initialize charts
     function initCharts() {
         klineChart = echarts.init(document.getElementById('klineChart'));
         indicatorChart = echarts.init(document.getElementById('indicatorChart'));
         
-        klineChart.on('click', function(params) {
-            if (params.componentType === 'series') {
-                showCandleInfo(params.dataIndex);
+        // 双图 dataZoom 同步
+        klineChart.group = 'stockGroup';
+        indicatorChart.group = 'stockGroup';
+        echarts.connect('stockGroup');
+        
+        // 点击 K 线图任意位置（zrender 底层点击，不限于数据点）
+        klineChart.getZr().on('click', function(params) {
+            const pointInPixel = [params.offsetX, params.offsetY];
+            const pointInGrid = klineChart.convertFromPixel({xAxisIndex: 0, yAxisIndex: 0}, pointInPixel);
+            // 尝试从 grid 坐标反推 dataIndex
+            if (!pointInGrid || pointInGrid[0] == null) return;
+            const idx = Math.round(pointInGrid[0]);
+            if (idx >= 0 && idx < klineData.length) {
+                selectDay(idx);
             }
         });
-
-        indicatorChart.on('click', function(params) {
-            if (params.componentType === 'series') {
-                showCandleInfo(params.dataIndex);
+        
+        // 点击指标图任意位置
+        indicatorChart.getZr().on('click', function(params) {
+            const pointInPixel = [params.offsetX, params.offsetY];
+            const pointInGrid = indicatorChart.convertFromPixel({xAxisIndex: 0, yAxisIndex: 0}, pointInPixel);
+            if (!pointInGrid || pointInGrid[0] == null) return;
+            const idx = Math.round(pointInGrid[0]);
+            if (idx >= 0 && idx < klineData.length) {
+                selectDay(idx);
             }
         });
 
         window.addEventListener('resize', () => {
             klineChart.resize();
             indicatorChart.resize();
+        });
+    }
+    
+    // 选中某天：画竖线 + 打开点位分析
+    function selectDay(index) {
+        selectedDateIndex = index;
+        drawMarkLines(index);
+        showCandleInfo(index);
+    }
+    
+    // 在两张图上画竖线标记
+    function drawMarkLines(index) {
+        if (index < 0 || !klineData.length) return;
+        const date = klineData[index].date;
+        // K 线图加竖线
+        klineChart.setOption({
+            series: [{
+                markLine: {
+                    silent: true, symbol: 'none',
+                    lineStyle: { color: '#58a6ff', width: 1, type: 'dashed' },
+                    data: [{ xAxis: date }]
+                }
+            }]
+        });
+        // 指标图加竖线
+        indicatorChart.setOption({
+            series: [{
+                markLine: {
+                    silent: true, symbol: 'none',
+                    lineStyle: { color: '#58a6ff', width: 1, type: 'dashed' },
+                    data: [{ xAxis: date }]
+                }
+            }]
         });
     }
 
@@ -217,6 +268,8 @@
                 klineData = data;
                 renderKlineChart(data);
                 renderIndicatorChart(data, currentIndicator);
+                // 重新画竖线（切换指标后）
+                if (selectedDateIndex >= 0) setTimeout(() => drawMarkLines(selectedDateIndex), 50);
             })
             .catch(err => console.error('Kline error:', err));
     }
@@ -450,11 +503,12 @@
                     document.getElementById('pointPrediction').innerHTML = `<span style="color: var(--text-secondary);">${pa.error}</span>`;
                     return;
                 }
+                paData = pa;
 
-                // 全部窗口数据
                 const windowPreds = pa.window_predictions || {};
                 const weightsByWindow = pa.weights_by_window || {};
-                let currentWindow = 'd5'; // 默认展示 d5
+                const avgSamples = pa.avg_samples || 0;
+                let currentWindow = 'd5';
 
                 function renderWindow(winName) {
                     currentWindow = winName;
@@ -463,46 +517,42 @@
 
                     const aggPred = wp.prediction || '--';
                     const aggConf = wp.confidence || 0;
+                    const aggAcc = wp.accuracy || '';
                     const aggColor = aggPred === '看涨' ? '#ff4d4f' : aggPred === '看跌' ? '#52c41a' : '#faad14';
+                    const aggAccCls = aggAcc.includes('正确') ? 'accuracy-correct' : aggAcc.includes('错误') ? 'accuracy-wrong' : '';
 
                     // === Tab 条 ===
                     let html = '<div style="display:flex; gap:4px; margin-bottom:12px; flex-wrap:wrap;">';
                     ['d1','d3','d5','d10','d30'].forEach(w => {
-                        const label = ({d1:'T+1 日',d3:'T+3 日',d5:'T+5 日',d10:'T+10 日',d30:'T+30 日'})[w];
+                        const label = ({d1:'T+1日',d3:'T+3日',d5:'T+5日',d10:'T+10日',d30:'T+30日'})[w];
                         const wp_w = windowPreds[w] || {};
                         const isActive = w === currentWindow;
                         const pred = wp_w.prediction || '--';
+                        const acc = wp_w.accuracy || '';
                         const dot = pred === '看涨' ? '🔴' : pred === '看跌' ? '🟢' : '⚪';
                         html += `<button onclick="switchWinPoint('${w}')" 
-                            style="flex:1; min-width:60px; padding:6px 4px; border:1px solid ${isActive ? 'var(--accent-color)' : 'var(--border-color)'};
-                            background:${isActive ? 'var(--accent-color)' : 'transparent'}; color:${isActive ? '#fff' : 'var(--text-primary)'};
-                            border-radius:6px; cursor:pointer; font-size:12px; transition:all 0.2s;">
-                            ${dot} ${label}<br><span style="font-size:10px; opacity:0.7;">${pred}</span>
+                            style="flex:1; min-width:60px; padding:6px 2px; border:1px solid ${isActive?'var(--accent-color)':'var(--border-color)'};
+                            background:${isActive?'var(--accent-color)':'transparent'}; color:${isActive?'#fff':'var(--text-primary)'};
+                            border-radius:6px; cursor:pointer; font-size:11px; transition:all 0.2s;">
+                            ${dot} ${label}<br><span style="font-size:9px; opacity:0.7;">${pred} ${acc}</span>
                         </button>`;
                     });
                     html += '</div>';
 
-                    // === 当前窗口预测 ===
+                    // === 当前窗口加权评分 ===
                     html += `<div style="background:var(--bg-tertiary); border-radius:8px; padding:12px; margin-bottom:12px;">`;
-                    html += `<span style="font-size:14px; color:var(--text-secondary);">📊 ${({d1:'T+1',d3:'T+3',d5:'T+5',d10:'T+10',d30:'T+30'})[winName]} 加权评分</span><br>`;
+                    html += `<span style="font-size:13px; color:var(--text-secondary);">📊 ${({d1:'T+1',d3:'T+3',d5:'T+5',d10:'T+10',d30:'T+30'})[winName]} 加权评分</span><br>`;
                     html += `<span style="font-size:24px; font-weight:bold; color:${aggColor};">${aggPred}</span> `;
-                    html += `<span style="color:var(--text-secondary);">置信度 ${aggConf}%</span>`;
-                    html += `<br><span style="font-size:11px; color:var(--text-secondary);">看多 ${wp.buy_pct||0}% | 看空 ${wp.sell_pct||0}%</span>`;
+                    html += `<span style="font-size:15px; color:var(--text-secondary);">置信度 ${aggConf}%</span>`;
+                    if (avgSamples > 0) {
+                        html += `<span style="font-size:15px; color:var(--text-tertiary);"> (${avgSamples}样本)</span>`;
+                    }
+                    html += `<span class="${aggAccCls}" style="font-size:15px; margin-left:8px;">${aggAcc}</span>`;
+                    html += `<br><span style="font-size:11px; color:var(--text-secondary);">看多 ${wp.buy_pct||0}% | 看空 ${wp.sell_pct||0}% | 中性 ${wp.neutral_pct||0}%</span>`;
                     html += '</div>';
 
-                    // === 当前窗口权重表 ===
-                    html += '<div style="margin-bottom:12px;">';
-                    html += '<strong style="color:var(--text-secondary); font-size:13px;">📈 各指标权重 — ' + ({d1:'T+1',d3:'T+3',d5:'T+5',d10:'T+10',d30:'T+30'})[winName] + ' 窗口</strong>';
-                    html += '<table class="comparison-table"><thead><tr><th>指标</th><th>胜率</th><th>权重</th><th>样本</th></tr></thead><tbody>';
-                    const sortedWeights = Object.entries(ww).sort((a,b) => b[1].weight - a[1].weight);
-                    sortedWeights.forEach(([indId, w]) => {
-                        const cls = w.accuracy >= 35 ? 'accuracy-correct' : w.accuracy < 25 ? 'accuracy-wrong' : '';
-                        html += `<tr><td><strong>${indId}</strong></td><td class="${cls}">${w.accuracy}%</td><td><strong>${w.weight}%</strong></td><td>${w.samples}次</td></tr>`;
-                    });
-                    html += '</tbody></table></div>';
-
-                    // === 各指标预测卡片 ===
-                    html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:8px;">';
+                    // === 各指标预测卡片（带当前窗口胜率/权重徽章） ===
+                    html += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:6px;">';
                     pa.indicator_results.forEach(r => {
                         let predColor = r.prediction === '看涨' ? '#ff4d4f' : r.prediction === '看跌' ? '#52c41a' : '#8b949e';
                         let accClass = r.accuracy && r.accuracy.includes('正确') ? 'accuracy-correct' :
@@ -513,34 +563,34 @@
                         const wInfo = ww[r.id];
                         let weightBadge = '';
                         if (wInfo) {
-                            weightBadge = `<span style="font-size:10px; color:var(--text-secondary);">🏆胜率 ${wInfo.accuracy}% | 权重 ${wInfo.weight}%</span>`;
+                            weightBadge = `<span style="font-size:10px; color:var(--text-secondary);">🏆胜率 ${wInfo.accuracy.toFixed(2)}% | 权重 ${wInfo.weight.toFixed(2)}%</span>`;
                         }
-                        html += `<div style="background:var(--bg-tertiary); border-radius:8px; padding:10px; ${bgStyle}">`;
+                        html += `<div style="background:var(--bg-tertiary); border-radius:8px; padding:8px; ${bgStyle}">`;
                         html += `<div style="display:flex; justify-content:space-between; align-items:start;">`;
                         html += `<div>`;
-                        html += `<span style="font-weight:bold; color:var(--accent-color);">${r.id}</span> `;
-                        html += `<span style="font-size:12px; color:var(--text-secondary);">${r.name}</span><br>`;
-                        html += `<span style="font-size:14px;">${r.value} ${r.unit}</span><br>`;
-                        html += `<span style="font-size:12px; color:var(--text-secondary);">${r.signal}</span><br>`;
+                        html += `<span style="font-weight:bold; color:var(--accent-color); font-size:13px;">${r.id}</span> `;
+                        html += `<span style="font-size:11px; color:var(--text-secondary);">${r.name}</span><br>`;
+                        html += `<span style="font-size:13px;">${r.value} ${r.unit}</span><br>`;
+                        html += `<span style="font-size:11px; color:var(--text-secondary);">${r.signal}</span><br>`;
                         html += weightBadge;
                         html += '</div>';
                         html += '<div style="text-align:right;">';
-                        html += `<span style="color:${predColor}; font-weight:bold;">${r.prediction}</span><br>`;
-                        html += `<span class="${accClass}" style="font-size:13px;">${r.accuracy || ''}</span>`;
+                        html += `<span style="color:${predColor}; font-weight:bold; font-size:13px;">${r.prediction}</span><br>`;
+                        html += `<span class="${accClass}" style="font-size:12px;">${r.accuracy || ''}</span>`;
                         html += '</div></div></div>';
                     });
                     html += '</div>';
 
-                    // === 多窗口验证 ===
+                    // === 多窗口实际验证 ===
                     if (pa.comparison && pa.comparison.actual_windows) {
                         const aw = pa.comparison.actual_windows;
                         html += '<div style="margin-top:12px; padding:10px; background:var(--bg-tertiary); border-radius:8px; font-size:12px;">';
-                        html += '<strong style="color:var(--text-secondary);">📏 多窗口实际走势验证</strong><br>';
+                        html += '<strong style="color:var(--text-secondary);">📏 实际走势验证</strong><br>';
                         ['d1','d3','d5','d10','d30'].forEach(w => {
                             if (aw[w]) {
                                 const cls = aw[w].return >= 0 ? 'up' : 'down';
                                 const sn = aw[w].return >= 0 ? '+' : '';
-                                html += `<span style="margin-right:12px;">${w}日: <span class="${cls}">${sn}${aw[w].return}%</span> (${aw[w].trend})</span>`;
+                                html += `<span style="margin-right:12px;">${w}日: <span class="${cls}">${sn}${aw[w].return.toFixed(2)}%</span> (${aw[w].trend})</span>`;
                             }
                         });
                         html += '</div>';
@@ -561,12 +611,10 @@
                     document.getElementById('pointPrediction').innerHTML = html;
                 }
 
-                // 全局切换函数
                 window.switchWinPoint = function(winName) {
                     renderWindow(winName);
                 };
 
-                // 初始渲染 d5
                 renderWindow('d5');
             })
             .catch(err => {
@@ -592,6 +640,8 @@
             btn.classList.toggle('active', btn.dataset.indicator === indicator);
         });
         renderIndicatorChart(klineData, indicator);
+        // 重新画竖线
+        if (selectedDateIndex >= 0) setTimeout(() => drawMarkLines(selectedDateIndex), 50);
     }
 
     // Indicator info modal
