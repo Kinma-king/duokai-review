@@ -343,7 +343,7 @@ def list_indicator_info():
 def point_analysis(code, date):
     """返回每个指标独立的预测和准确性，以及汇总评分"""
     try:
-        klines = get_kline_data(code, 200)
+        klines = get_kline_data(code, 500)
         if not klines:
             return jsonify({'error': 'No data'}), 404
         
