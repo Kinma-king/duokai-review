@@ -483,7 +483,7 @@
                     const w = weights[r.id];
                     let weightBadge = '';
                     if (w) {
-                        weightBadge = `<span style="font-size: 10px; color: var(--text-secondary);">胜率 ${w.accuracy}% | 权重 ${w.weight}%</span>`;
+                        weightBadge = `<span style="font-size: 10px; color: var(--text-secondary);">🏆${w.best_window || ''} 胜率 ${w.accuracy}% | 权重 ${w.weight}%</span>`;
                     }
                     
                     aggHtml += `<div style="background: var(--bg-tertiary); border-radius: 8px; padding: 10px; ${bgStyle}">`;
@@ -521,11 +521,18 @@
 
                 // ---- 指标权重总览 ----
                 if (pa.indicator_weights && Object.keys(pa.indicator_weights).length > 0) {
-                    let whtml = '<strong style="color: var(--text-secondary);">📈 历史胜率 & 动态权重</strong>';
-                    whtml += '<table class="comparison-table"><thead><tr><th>指标</th><th>胜率</th><th>权重</th><th>样本</th></tr></thead><tbody>';
+                    let whtml = '<strong style="color: var(--text-secondary);">📈 多窗口回测 & 动态权重 (最佳窗口)</strong>';
+                    whtml += '<table class="comparison-table"><thead><tr><th>指标</th><th>最佳窗口</th><th>胜率</th><th>权重</th><th>样本</th></tr></thead><tbody>';
                     Object.entries(pa.indicator_weights).forEach(([id, w]) => {
-                        const cls = w.accuracy >= 55 ? 'accuracy-correct' : w.accuracy < 45 ? 'accuracy-wrong' : '';
-                        whtml += `<tr><td>${id}</td><td class="${cls}">${w.accuracy}%</td><td>${w.weight}%</td><td>${w.samples}次</td></tr>`;
+                        const cls = w.accuracy >= 40 ? 'accuracy-correct' : w.accuracy < 30 ? 'accuracy-wrong' : '';
+                        whtml += `<tr><td>${id}</td><td>${w.best_window || '--'}</td><td class="${cls}">${w.accuracy}%</td><td>${w.weight}%</td><td>${w.samples}次</td></tr>`;
+                        // 展示所有窗口
+                        if (w.windows) {
+                            const winDetails = Object.entries(w.windows)
+                                .map(([wn, ws]) => `${wn}:${ws.accuracy}%`)
+                                .join(' ');
+                            whtml += `<tr style="font-size:10px;color:var(--text-secondary);"><td></td><td colspan="4">${winDetails}</td></tr>`;
+                        }
                     });
                     whtml += '</tbody></table>';
                     document.getElementById('accuracyComparison').innerHTML = whtml;
