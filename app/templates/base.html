@@ -449,13 +449,22 @@
 
         function searchStock() {
             const query = searchInput.value.trim();
-            if (query) {
+            if (!query) return;
+            // 如果有联想结果且第一个可见，跳到第一个
+            const items = searchResults.querySelectorAll('.search-item');
+            if (searchResults.classList.contains('active') && items.length > 0) {
+                items[0].click();
+            } else {
+                // 否则直接拼接搜索
                 window.location.href = `/api/search?q=${encodeURIComponent(query)}`;
             }
         }
 
         searchInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') { searchStock(); }
+            if (e.key === 'Enter') { 
+                e.preventDefault();
+                searchStock(); 
+            }
         });
     </script>
     {% block extra_js %}{% endblock %}

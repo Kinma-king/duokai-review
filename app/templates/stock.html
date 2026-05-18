@@ -130,7 +130,7 @@
 <!-- Technical Analysis -->
 <div class="card">
     <div class="card-title">
-        <span>📊 技术分析</span>
+        <span>📊 实时预测</span>
         <span id="analysisScore" style="font-size: 14px;">--</span>
     </div>
     <div class="analysis-grid" id="analysisContent">
@@ -265,7 +265,7 @@
             series: [
                 {
                     name: 'K线', type: 'candlestick', data: values,
-                    itemStyle: { color: '#ff4d4f', color0: '#52c41a', borderColor: '#ff4d4f', borderColor0: '#52c41a' }
+                    itemStyle: { color: '#52c41a', color0: '#ff4d4f', borderColor: '#52c41a', borderColor0: '#ff4d4f' }
                 },
                 { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
                 { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
@@ -288,7 +288,7 @@
                     { name: 'DIF', type: 'line', data: data.map(d => d.MACD), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
                     { name: 'DEA', type: 'line', data: data.map(d => d.MACD_SIGNAL), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
                     { name: 'MACD', type: 'bar', data: data.map(d => d.MACD_HIST),
-                        itemStyle: { color: function(p) { return p.value >= 0 ? '#ff4d4f' : '#52c41a'; } }
+                        itemStyle: { color: function(p) { return p.value >= 0 ? '#52c41a' : '#ff4d4f'; } }
                     }
                 ];
                 yAxisName = 'MACD';
@@ -430,7 +430,7 @@
 
                 // ---- 汇总评分 ----
                 const agg = pa.aggregate;
-                const aggColor = agg.prediction === '看涨' ? '#52c41a' : agg.prediction === '看跌' ? '#ff4d4f' : '#faad14';
+                const aggColor = agg.prediction === '看涨' ? '#ff4d4f' : agg.prediction === '看跌' ? '#52c41a' : '#faad14';
                 const aggAccClass = agg.accuracy && agg.accuracy.includes('正确') ? 'accuracy-correct' : agg.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
                 
                 let aggHtml = '<div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 12px;">';
@@ -448,7 +448,7 @@
                 // ---- 各指标独立卡片 ----
                 aggHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">';
                 pa.indicator_results.forEach(r => {
-                    let predColor = r.prediction === '看涨' ? '#52c41a' : r.prediction === '看跌' ? '#ff4d4f' : '#8b949e';
+                    let predColor = r.prediction === '看涨' ? '#ff4d4f' : r.prediction === '看跌' ? '#52c41a' : '#8b949e';
                     let accClass = r.accuracy && r.accuracy.includes('正确') ? 'accuracy-correct' : 
                                    r.accuracy.includes('错误') ? 'accuracy-wrong' :
                                    r.accuracy === '参考' ? '' : 'accuracy-neutral';
@@ -492,33 +492,100 @@
         document.getElementById('candleInfo').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Load technical analysis
+    // Load live prediction (uses latest kline day point analysis)
+    let predictionData = null;
+
     function loadAnalysis() {
-        fetch(`/api/analysis/${code}`)
+        const container = document.getElementById('analysisContent');
+        const scoreEl = document.getElementById('analysisScore');
+        container.innerHTML = '<div class="loading"><div class="spinner"></div>综合预测中...</div>';
+        scoreEl.innerHTML = '--';
+
+        // 先取K线，再对最后一天做点位分析
+        fetch(`/api/kline/${code}?period=day&count=120`)
             .then(res => res.json())
-            .then(data => {
-                document.getElementById('analysisScore').innerHTML = 
-                    `综合评分: <span style="color: ${data.score >= 50 ? '#52c41a' : '#ff4d4f'};">${data.score}</span> - ${data.overall}`;
-                const container = document.getElementById('analysisContent');
-                container.innerHTML = '';
-                if (data.signals && data.signals.length > 0) {
-                    data.signals.forEach(signal => {
-                        const item = document.createElement('div');
-                        item.className = `analysis-item ${signal.trend === '买入' || signal.trend === '上涨' ? 'buy' : signal.trend === '卖出' || signal.trend === '下跌' ? 'sell' : ''}`;
-                        item.innerHTML = `
-                            <div class="analysis-indicator">${signal.indicator}</div>
-                            <div class="analysis-signal">${signal.signal}</div>
-                            <div class="analysis-trend">趋势: ${signal.trend} | 强度: ${signal.strength}</div>
-                        `;
-                        container.appendChild(item);
-                    });
-                } else {
-                    container.innerHTML = '<div style="color: var(--text-secondary);">暂无明确信号</div>';
+            .then(klineData => {
+                if (!klineData || klineData.length === 0) {
+                    container.innerHTML = '<div style="color: var(--text-secondary);">暂无数据</div>';
+                    return;
                 }
+                const latest = klineData[klineData.length - 1];
+                const date = latest.date;
+
+                // 对最新一天做点分析
+                return fetch(`/api/point-analysis/${code}/${date}`);
+            })
+            .then(res => res.json())
+            .then(pa => {
+                if (!pa) return;
+                predictionData = pa;
+                renderPrediction(pa);
             })
             .catch(err => {
-                document.getElementById('analysisContent').innerHTML = '<div style="color: var(--text-secondary);">分析数据加载失败</div>';
+                container.innerHTML = '<div style="color: var(--text-secondary);">预测数据加载失败</div>';
             });
+    }
+
+    function renderPrediction(pa) {
+        const container = document.getElementById('analysisContent');
+        const scoreEl = document.getElementById('analysisScore');
+
+        if (pa.error) {
+            container.innerHTML = `<div style="color: var(--text-secondary);">${pa.error}</div>`;
+            return;
+        }
+
+        const agg = pa.aggregate;
+        const aggColor = agg.prediction === '看涨' ? '#ff4d4f' : agg.prediction === '看跌' ? '#52c41a' : '#faad14';
+        const aggAccClass = agg.accuracy && agg.accuracy.includes('正确') ? 'accuracy-correct' : 
+                            agg.accuracy && agg.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
+
+        scoreEl.innerHTML = `
+            <span style="font-size: 18px; font-weight: bold; color: ${aggColor};">${agg.prediction}</span>
+            <span style="color: var(--text-secondary); margin: 0 8px;">置信度 ${agg.confidence}%</span>
+            <span style="color: var(--text-secondary);">看多 ${agg.buy_count} | 看空 ${agg.sell_count}</span>
+        `;
+
+        container.innerHTML = '';
+
+        // 各指标预测卡片
+        pa.indicator_results.forEach(r => {
+            if (r.prediction === '--') return;
+            let predColor = r.prediction === '看涨' ? '#ff4d4f' : r.prediction === '看跌' ? '#52c41a' : '#8b949e';
+            let accClass = r.accuracy && r.accuracy.includes('正确') ? 'accuracy-correct' : 
+                           r.accuracy && r.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
+            let bgStyle = r.accuracy && r.accuracy.includes('正确') ? 'border-left: 3px solid #52c41a;' :
+                          r.accuracy && r.accuracy.includes('错误') ? 'border-left: 3px solid #ff4d4f;' : '';
+
+            const item = document.createElement('div');
+            item.className = 'analysis-item';
+            item.style.cssText = bgStyle;
+            item.innerHTML = `
+                <div class="analysis-indicator">${r.id} <span style="color: var(--text-secondary); font-size: 12px;">${r.name}</span></div>
+                <div class="analysis-signal" style="color: ${predColor};">${r.prediction}</div>
+                <div class="analysis-trend">${r.signal} | ${r.value}</div>
+                <div style="font-size: 11px; margin-top: 2px;">
+                    <span class="${accClass}">${r.accuracy || ''}</span>
+                </div>
+            `;
+            container.appendChild(item);
+        });
+
+        // 实际走势对比
+        if (pa.comparison) {
+            let compDiv = document.createElement('div');
+            compDiv.style.cssText = 'grid-column: 1 / -1; margin-top: 8px; font-size: 12px; color: var(--text-secondary);';
+            compDiv.innerHTML = '<strong>📉 次日走势：</strong>' +
+                (pa.comparison.subsequent && pa.comparison.subsequent.length > 0 
+                    ? pa.comparison.subsequent.map(s => {
+                        const cls = s.change_pct >= 0 ? 'up' : 'down';
+                        const sn = s.change_pct >= 0 ? '+' : '';
+                        return `${s.date} <span class="${cls}">${sn}${s.change_pct.toFixed(2)}%</span>`;
+                    }).join(' → ')
+                    : '--') +
+                ` (实际: ${pa.comparison.actual_trend || '--'})`;
+            container.appendChild(compDiv);
+        }
     }
 
     // Switch period

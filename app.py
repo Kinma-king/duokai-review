@@ -45,14 +45,14 @@ INDICATOR_INFO = {
     },
     "KDJ": {
         "name": "随机指标 KDJ",
-        "desc": "KDJ 通过比较收盘价在近期价格区间的位置，判断超买超卖状态，由 George Lane 发明。",
+        "desc": "KDJ (Stochastic Oscillator 随机指标) 通过比较收盘价在近期价格区间的位置，判断超买超卖状态，由 George Lane 发明。",
         "principle": "1. K 值 > 80 → 超买区域，警惕回调\n2. K 值 < 20 → 超卖区域，关注反弹\n3. K 线上穿 D 线 → 金叉，买入\n4. K 线下穿 D 线 → 死叉，卖出\n5. J 值 > 100 → 严重超买\n6. J 值 < 0 → 严重超卖",
         "author": "George Lane, 1950s",
         "category": "摆动"
     },
     "RSI": {
         "name": "相对强弱指标 RSI",
-        "desc": "RSI 衡量近期价格变动的速度和幅度，用于判断超买超卖和趋势强度，由 Welles Wilder 发明。",
+        "desc": "RSI (Relative Strength Index 相对强弱指标) 衡量近期价格变动的速度和幅度，用于判断超买超卖和趋势强度，由 Welles Wilder 发明。",
         "principle": "1. RSI > 70 → 超买，可能回调\n2. RSI < 30 → 超卖，可能反弹\n3. RSI 在 50 上方 → 多头市场\n4. RSI 在 50 下方 → 空头市场\n5. RSI 顶背离 → 卖出信号\n6. RSI 底背离 → 买入信号",
         "author": "Welles Wilder, 1978",
         "category": "摆动"
@@ -66,56 +66,56 @@ INDICATOR_INFO = {
     },
     "OBV": {
         "name": "能量潮 On-Balance Volume",
-        "desc": "OBV 通过累计成交量（上涨日加、下跌日减）判断资金流向，由 Joseph Granville 发明。",
+        "desc": "OBV (On-Balance Volume 能量潮) 通过累计成交量（上涨日加、下跌日减）判断资金流向，由 Joseph Granville 发明。",
         "principle": "1. OBV 创新高、价格未创新高 → 量价背离，看跌\n2. OBV 创新低、价格未创新低 → 量价背离，看涨\n3. OBV 与价格同步上升 → 上升趋势确认\n4. OBV 与价格同步下降 → 下降趋势确认\n5. OBV 横盘时价格下跌 → 底部吸筹信号",
         "author": "Joseph Granville, 1963",
         "category": "量价"
     },
     "WR": {
         "name": "威廉指标 Williams %R",
-        "desc": "WR 衡量收盘价在近期高低价区间的位置，与 KDJ 原理相似，由 Larry Williams 发明。",
+        "desc": "WR (Williams %R 威廉指标) 衡量收盘价在近期高低价区间的位置，与 KDJ 原理相似，由 Larry Williams 发明。",
         "principle": "1. WR < 20 → 超买，可能回调 (WR 数值越小越超买)\n2. WR > 80 → 超卖，可能反弹\n3. WR 多次触及 0~20 区域 → 顶部信号\n4. WR 多次触及 80~100 区域 → 底部信号\n5. 注意：WR 是反向指标，越低越看跌",
         "author": "Larry Williams, 1973",
         "category": "摆动"
     },
     "CCI": {
         "name": "商品通道指数 CCI",
-        "desc": "CCI 衡量价格偏离统计平均的程度，对极端行情反应敏感，由 Donald Lambert 发明。",
+        "desc": "CCI (Commodity Channel Index 商品通道指数) 衡量价格偏离统计平均的程度，对极端行情反应敏感，由 Donald Lambert 发明。",
         "principle": "1. CCI > 100 → 超买，强势上涨\n2. CCI < -100 → 超卖，弱势下跌\n3. CCI 从 +100 上方回落 → 卖出信号\n4. CCI 从 -100 下方回升 → 买入信号\n5. CCI 在 ±100 之间 → 盘整行情",
         "author": "Donald Lambert, 1980",
         "category": "摆动"
     },
     "ATR": {
         "name": "平均真实波幅 ATR",
-        "desc": "ATR 衡量价格波动幅度（非方向），用于设定止损和仓位管理，由 Welles Wilder 发明。",
+        "desc": "ATR (Average True Range 平均真实波幅) 衡量价格波动幅度（非方向），用于设定止损和仓位管理，由 Welles Wilder 发明。",
         "principle": "1. ATR 上升 → 波动加大，趋势可能启动\n2. ATR 下降 → 波动减小，可能盘整\n3. 止损可设为 2~3 倍 ATR\n4. ATR 极高 → 恐慌或狂热，可能反转\n5. 注意：ATR 不指示方向，只指示波动烈度",
         "author": "Welles Wilder, 1978",
         "category": "波动"
     },
     "BIAS": {
         "name": "乖离率 BIAS",
-        "desc": "BIAS 衡量价格偏离移动平均线的程度，反映超买超卖和回归均值的概率。",
+        "desc": "BIAS (乖离率) 衡量价格偏离移动平均线的程度，反映超买超卖和回归均值的概率。",
         "principle": "1. BIAS > 正阈值 → 严重超买，短期回调概率大\n2. BIAS < 负阈值 → 严重超卖，短期反弹概率大\n3. BIAS 由负转正 → 趋势转多\n4. BIAS 由正转负 → 趋势转空\n5. 不同股票有不同的乖离阈值，活跃股阈值高",
         "author": "技术分析通用概念",
         "category": "摆动"
     },
     "PSY": {
         "name": "心理线 PSY",
-        "desc": "PSY 统计 N 日内上涨天数的占比，反映市场多空心理。",
+        "desc": "PSY (Psychological Line 心理线) 统计 N 日内上涨天数的占比，反映市场多空心理。",
         "principle": "1. PSY > 75 → 市场过热，警惕回调\n2. PSY < 25 → 市场过度悲观，关注反弹\n3. PSY 在 50 附近 → 多空均衡\n4. PSY 从高点回落 → 卖出信号\n5. PSY 从低点回升 → 买入信号",
         "author": "技术分析通用指标",
         "category": "心理"
     },
     "VR": {
         "name": "成交量比率 Volume Ratio",
-        "desc": "VR 比较上涨日成交量与下跌日成交量的比率，判断资金流入流出。",
+        "desc": "VR (Volume Ratio 成交量比率) 比较上涨日成交量与下跌日成交量的比率，判断资金流入流出。",
         "principle": "1. VR > 450 → 市场过热，顶部信号\n2. VR < 70 → 市场低迷，底部信号\n3. VR 在 150 左右 → 安全区域\n4. VR 上升、价格盘整 → 吸筹，后市看涨\n5. VR 下降、价格盘整 → 出货，后市看跌",
         "author": "技术分析通用指标",
         "category": "量价"
     },
     "VOL_MA": {
         "name": "成交量均线 Volume MA",
-        "desc": "成交量移动平均线，用于判断量能变化趋势。",
+        "desc": "VOL_MA (Volume Moving Average 成交量均线) 成交量移动平均线，用于判断量能变化趋势。",
         "principle": "1. 放量上涨 → 上涨趋势有力\n2. 缩量上涨 → 上攻乏力，警惕回落\n3. 放量下跌 → 恐慌抛售\n4. 缩量下跌 → 跌势减缓，可能见底\n5. 量比 > 1.5 → 当日活跃",
         "author": "技术分析通用指标",
         "category": "量价"
