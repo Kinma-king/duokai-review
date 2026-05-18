@@ -59,7 +59,7 @@
 </div>
 
 <!-- 使用指南弹窗 -->
-<div class="modal-overlay" id="guideModal" style="display:none;" onclick="closeGuide(event)">
+<div class="modal-overlay" id="guideModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9999; align-items:center; justify-content:center;" onclick="closeGuide(event)">
     <div class="modal" style="max-width: 600px; max-height: 80vh; overflow-y: auto; padding: 28px;" onclick="event.stopPropagation()">
         <button class="close-btn" onclick="document.getElementById('guideModal').style.display='none'">✕</button>
         <h3 style="text-align:center; margin-bottom: 24px; font-size:18px;">📖 使用指南</h3>
@@ -126,7 +126,8 @@
 
     // 使用指南弹窗
     function openGuide() {
-        document.getElementById('guideModal').style.display = 'flex';
+        const m = document.getElementById('guideModal');
+        m.style.display = 'flex';
     }
     function closeGuide(e) {
         if (e.target === document.getElementById('guideModal')) {
