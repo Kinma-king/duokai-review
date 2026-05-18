@@ -168,7 +168,7 @@ def get_quote(code):
                     'change': float(fields[31]) if len(fields) > 31 else 0,
                     'changePercent': float(fields[32]) if len(fields) > 32 else 0,
                     'volume': float(fields[36]) if len(fields) > 36 else 0,
-                    'amount': float(fields[37]) if len(fields) > 37 else 0,
+                    'amount': float(fields[37]) * 10000 if len(fields) > 37 else 0,
                 })
         return jsonify({'error': 'No data'}), 404
     except Exception as e:
