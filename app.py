@@ -343,7 +343,7 @@ def list_indicator_info():
 def point_analysis(code, date):
     """返回每个指标独立的预测和准确性，以及汇总评分"""
     try:
-        klines = get_kline_data(code, 500)
+        klines = get_kline_data(code, 1000)
         if not klines:
             return jsonify({'error': 'No data'}), 404
         
@@ -557,6 +557,8 @@ def point_analysis(code, date):
         
         # ---- 汇总评分 (动态权重) ----
         # 在整个K线序列上五窗口回测，每个窗口独立归一化权重
+        # 过滤掉非预测类指标（prediction == '--' 如 ATR）
+        scoring_results = [r for r in indicator_results if r.get('prediction') not in ('--', None, '')]
         weights_by_window = compute_indicator_weights(klines)
         
         # 为每个窗口计算加权预测
@@ -566,7 +568,7 @@ def point_analysis(code, date):
         for win_name in ['d1', 'd3', 'd5', 'd10', 'd30']:
             win_data = weights_by_window.get(win_name, {})
             w_dict = win_data.get('weights', {}) if win_data else {}
-            wagg = weighted_aggregate(indicator_results, w_dict)
+            wagg = weighted_aggregate(scoring_results, w_dict)
             
             # 验证该窗口预测是否准确
             actual_w = actual_windows.get(win_name, {})
@@ -791,7 +793,9 @@ def weighted_aggregate(indicator_results, weight_dict):
     
     for r in indicator_results:
         ind_id = r['id']
-        w = weight_dict.get(ind_id, 1.0)  # 等权重兜底
+        w = weight_dict.get(ind_id, 0.0)  # 不在权重字典的指标不参与打分
+        if w == 0.0:
+            continue
         
         if r['prediction'] == '看涨':
             buy_weight += w
