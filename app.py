@@ -201,7 +201,7 @@ def get_kline(code):
         response = requests.get(url, params=params, timeout=15)
         data = response.json()
         
-        stock_key = f"{market}{code}"
+        stock_key = f"{market}{raw_code}"
         period_key = f"qfq{period}"
         
         if data.get('data') and data['data'].get(stock_key):
@@ -637,7 +637,7 @@ def point_analysis(code, date):
             'aggregate': {
                 'buy_count': buy_count,
                 'sell_count': sell_count,
-                'neutral_count': len(indicator_results) - buy_count - sell_count,
+                'neutral_count': len(scoring_results) - buy_count - sell_count,
                 'prediction': wagg.get('prediction', '震荡'),
                 'confidence': wagg.get('confidence', 0),
                 'accuracy': agg_acc,
@@ -1050,7 +1050,7 @@ def get_kline_data(code, count=60):
     response = requests.get(url, params=params, timeout=15)
     data = response.json()
     
-    stock_key = f"{market}{code}"
+    stock_key = f"{market}{raw_code}"
     period_key = "qfqday"
     
     klines = []
