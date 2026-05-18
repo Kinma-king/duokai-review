@@ -60,36 +60,60 @@
 
 <!-- 使用指南弹窗 -->
 <div class="modal-overlay" id="guideModal" style="display:none;" onclick="closeGuide(event)">
-    <div class="modal" style="max-width: 680px; max-height: 80vh; overflow-y: auto;" onclick="event.stopPropagation()">
+    <div class="modal" style="max-width: 600px; max-height: 80vh; overflow-y: auto; padding: 28px;" onclick="event.stopPropagation()">
         <button class="close-btn" onclick="document.getElementById('guideModal').style.display='none'">✕</button>
-        <h3 style="margin-bottom: 16px;">📖 多开复盘 — 使用指南</h3>
+        <h3 style="text-align:center; margin-bottom: 24px; font-size:18px;">📖 使用指南</h3>
         
-        <div style="line-height: 1.9; color: var(--text-primary); font-size: 14px;">
-            <p><strong>1. 进入个股页面</strong><br>
-            您有三种方式进入分析页面：<br>
-            • 点击首页「大盘」栏中的<strong>上证指数 / 深证成指 / 创业板指</strong>，跳转到对应指数的 K 线分析页<br>
-            • 点击「热门股票」列表中的任意股票（默认显示 5 只，可展开查看全部）<br>
-            • 在<strong>顶部搜索框</strong>输入股票代码（如 600519）或名称（如 茅台），按回车直接跳转</p>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+            <!-- 第1步 -->
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+                <span style="font-size:28px; flex-shrink:0;">🏠</span>
+                <div>
+                    <strong style="color:var(--accent-color);">进入个股页</strong>
+                    <p style="margin:4px 0 0; font-size:13px; color:var(--text-secondary); line-height:1.7;">
+                    三种方式：点<strong>大盘指数</strong> / 点<strong>热门股票</strong> / <strong>搜索框</strong>输入代码或名称回车
+                    </p>
+                </div>
+            </div>
             
-            <p><strong>2. 查看历史走势</strong><br>
-            进入个股页面后：<br>
-            • 上方是 <strong>K 线图</strong>（日线/周线/月线可切换），红柱=上涨，绿柱=下跌<br>
-            • 下方是<strong>技术指标图</strong>，共 12 项可选：成交量、MA、MACD、KDJ、RSI、BOLL、OBV、WR、CCI、BIAS、PSY、VR<br>
-            • 点击指标名称旁的 <span style="color:var(--accent-color);">ⓘ</span> 可查看该指标的<strong>原理公式和使用法则</strong><br>
-            • 两张图均支持<strong>鼠标滚轮缩放</strong>和<strong>拖动平移</strong>，且缩放和位置会自动同步</p>
+            <!-- 第2步 -->
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+                <span style="font-size:28px; flex-shrink:0;">📈</span>
+                <div>
+                    <strong style="color:var(--accent-color);">浏览走势</strong>
+                    <p style="margin:4px 0 0; font-size:13px; color:var(--text-secondary); line-height:1.7;">
+                    上方K线图（<span style="color:#ff4d4f;">红涨</span><span style="color:#52c41a;">绿跌</span>）、下方12项技术指标图。<br>
+                    滚轮缩放、拖动平移，双图联动。<br>
+                    点 ⓘ 查看指标原理与法则。
+                    </p>
+                </div>
+            </div>
             
-            <p><strong>3. 点击时点查看技术分析</strong><br>
-            这是本系统的核心功能：<br>
-            • 在 K 线图或指标图的<strong>任意位置点击</strong>，会出现蓝色虚线定位到当天，下方弹出「点位分析」面板<br>
-            • 面板展示该日每项指标的独立预测（看涨/看跌），以及预测 vs 后续实际走势的<strong>正确 ✅ 或错误 ❌</strong>结果<br>
-            • 点击<strong>最右侧的一天</strong>（最新交易日），可查看对未来的实时预测<br>
-            • 顶部有 <strong>T+1日 / T+3日 / T+5日 / T+10日 / T+30日</strong> 五个 Tab，切换即可查看不同周期预测</p>
+            <!-- 第3步 -->
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+                <span style="font-size:28px; flex-shrink:0;">👆</span>
+                <div>
+                    <strong style="color:var(--accent-color);">点击分析</strong>
+                    <p style="margin:4px 0 0; font-size:13px; color:var(--text-secondary); line-height:1.7;">
+                    图上<strong>任意位置点击</strong> → 蓝色虚线定位 → 弹出点位面板。<br>
+                    展示各指标预测 + 实际验证 ✅ / ❌。<br>
+                    点<strong>最右侧</strong>（最新日）查看实时预测。<br>
+                    顶部 <strong>T+1 / T+3 / T+5 / T+10 / T+30</strong> 切换周期。
+                    </p>
+                </div>
+            </div>
             
-            <p><strong>4. 理解加权评分</strong><br>
-            每个时点的预测分为两步：<br>
-            <strong>第一步 — 训练权重：</strong>系统取该日期<strong>之前最多 1060 天</strong>的历史 K 线，对每项指标在五个时间窗口上分别测试其预测胜率。例如 MACD 在 T+5 窗口的正确率是多少？WR 在 T+10 窗口表现如何？每个窗口得出各指标的胜率后，<strong>按胜率比例分配权重</strong>（总权重 = 100%）。<br>
-            <strong>第二步 — 加权投票：</strong>当前这一天每项指标给出看涨/看跌判断，按该窗口的权重加权计票，得出最终的<strong>加权评分</strong>（看涨或看跌 + 置信度百分比）。同时与实际走势对比标注 ✅ 正确或 ❌ 错误。<br>
-            这是一个<strong>纯统计学习</strong>的过程：不预判哪个指标好用，让历史数据自己说话。</p>
+            <!-- 第4步 -->
+            <div style="display:flex; gap:12px; align-items:flex-start;">
+                <span style="font-size:28px; flex-shrink:0;">⚖️</span>
+                <div>
+                    <strong style="color:var(--accent-color);">加权评分原理</strong>
+                    <p style="margin:4px 0 0; font-size:13px; color:var(--text-secondary); line-height:1.7;">
+                    取选中日期<strong>前最多1060天</strong>历史数据，在五个时间窗口上回测每项指标的胜率 → 按胜率分配权重 → 当前时点加权投票出<strong>看涨/看跌 + 置信度</strong>。<br>
+                    纯统计学习：不预设哪个指标好用，让数据说话。
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
 </div>
