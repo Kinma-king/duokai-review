@@ -129,19 +129,6 @@
     <div class="chart-container" id="indicatorChart" style="height: 250px;"></div>
 </div>
 
-<!-- Technical Analysis -->
-<div class="card">
-    <div class="card-title">
-        <span>📊 实时预测</span>
-        <span id="analysisScore" style="font-size: 14px;">--</span>
-    </div>
-    <div class="analysis-grid" id="analysisContent">
-        <div class="loading">
-            <div class="spinner"></div>
-            分析中...
-        </div>
-    </div>
-</div>
 
 <!-- Clicked Candle Info -->
 <div class="card" id="candleInfo" style="display: none;">
@@ -523,102 +510,6 @@
         document.getElementById('candleInfo').scrollIntoView({ behavior: 'smooth' });
     }
 
-    // Load live prediction (uses latest kline day point analysis)
-    let predictionData = null;
-
-    function loadAnalysis() {
-        const container = document.getElementById('analysisContent');
-        const scoreEl = document.getElementById('analysisScore');
-        container.innerHTML = '<div class="loading"><div class="spinner"></div>综合预测中...</div>';
-        scoreEl.innerHTML = '--';
-
-        // 先取K线，再对最后一天做点位分析
-        fetch(`/api/kline/${code}?period=day&count=120`)
-            .then(res => res.json())
-            .then(klineData => {
-                if (!klineData || klineData.length === 0) {
-                    container.innerHTML = '<div style="color: var(--text-secondary);">暂无数据</div>';
-                    return;
-                }
-                const latest = klineData[klineData.length - 1];
-                const date = latest.date;
-
-                // 对最新一天做点分析
-                return fetch(`/api/point-analysis/${code}/${date}`);
-            })
-            .then(res => res.json())
-            .then(pa => {
-                if (!pa) return;
-                predictionData = pa;
-                renderPrediction(pa);
-            })
-            .catch(err => {
-                container.innerHTML = '<div style="color: var(--text-secondary);">预测数据加载失败</div>';
-            });
-    }
-
-    function renderPrediction(pa) {
-        const container = document.getElementById('analysisContent');
-        const scoreEl = document.getElementById('analysisScore');
-
-        if (pa.error) {
-            container.innerHTML = `<div style="color: var(--text-secondary);">${pa.error}</div>`;
-            return;
-        }
-
-        const agg = pa.aggregate;
-        const aggColor = agg.prediction === '看涨' ? '#ff4d4f' : agg.prediction === '看跌' ? '#52c41a' : '#faad14';
-        const aggAccClass = agg.accuracy && agg.accuracy.includes('正确') ? 'accuracy-correct' : 
-                            agg.accuracy && agg.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
-
-        scoreEl.innerHTML = `
-            <span style="font-size: 18px; font-weight: bold; color: ${aggColor};">${agg.prediction}</span>
-            <span style="color: var(--text-secondary); margin: 0 8px;">置信度 ${agg.confidence}%</span>
-            <span style="color: var(--text-secondary);">看多 ${agg.buy_count} | 看空 ${agg.sell_count}</span>
-        `;
-
-        container.innerHTML = '';
-
-        // 各指标预测卡片
-        pa.indicator_results.forEach(r => {
-            if (r.prediction === '--') return;
-            let predColor = r.prediction === '看涨' ? '#ff4d4f' : r.prediction === '看跌' ? '#52c41a' : '#8b949e';
-            let accClass = r.accuracy && r.accuracy.includes('正确') ? 'accuracy-correct' : 
-                           r.accuracy && r.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
-            let bgStyle = r.accuracy && r.accuracy.includes('正确') ? 'border-left: 3px solid #52c41a;' :
-                          r.accuracy && r.accuracy.includes('错误') ? 'border-left: 3px solid #ff4d4f;' : '';
-
-            const item = document.createElement('div');
-            item.className = 'analysis-item';
-            item.style.cssText = bgStyle;
-            item.innerHTML = `
-                <div class="analysis-indicator">${r.id} <span style="color: var(--text-secondary); font-size: 12px;">${r.name}</span></div>
-                <div class="analysis-signal" style="color: ${predColor};">${r.prediction}</div>
-                <div class="analysis-trend">${r.signal} | ${r.value}</div>
-                <div style="font-size: 11px; margin-top: 2px;">
-                    <span class="${accClass}">${r.accuracy || ''}</span>
-                </div>
-            `;
-            container.appendChild(item);
-        });
-
-        // 实际走势对比
-        if (pa.comparison) {
-            let compDiv = document.createElement('div');
-            compDiv.style.cssText = 'grid-column: 1 / -1; margin-top: 8px; font-size: 12px; color: var(--text-secondary);';
-            compDiv.innerHTML = '<strong>📉 次日走势：</strong>' +
-                (pa.comparison.subsequent && pa.comparison.subsequent.length > 0 
-                    ? pa.comparison.subsequent.map(s => {
-                        const cls = s.change_pct >= 0 ? 'up' : 'down';
-                        const sn = s.change_pct >= 0 ? '+' : '';
-                        return `${s.date} <span class="${cls}">${sn}${s.change_pct.toFixed(2)}%</span>`;
-                    }).join(' → ')
-                    : '--') +
-                ` (实际: ${pa.comparison.actual_trend || '--'})`;
-            container.appendChild(compDiv);
-        }
-    }
-
     // Switch period
     function switchPeriod(period) {
         currentPeriod = period;
@@ -688,7 +579,6 @@
     initCharts();
     loadQuote();
     loadKline('day');
-    loadAnalysis();
 
     // Auto refresh quote every 30s
     setInterval(() => { loadQuote(); }, 30000);
