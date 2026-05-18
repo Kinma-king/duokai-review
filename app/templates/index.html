@@ -10,19 +10,19 @@
         <span style="font-size: 12px; color: var(--text-secondary);">点击指数查看详情</span>
     </div>
     <div class="analysis-grid" id="marketStats">
-        <a href="/stock/sh000001" class="analysis-item" style="text-decoration:none; cursor:pointer;">
+        <a href="/stock/sh000001" class="analysis-item" style="text-decoration:none; cursor:pointer; color:inherit;">
             <div class="analysis-indicator">上证指数</div>
-            <div class="analysis-signal" id="shIndex">--</div>
+            <div class="analysis-signal up" id="shIndex">--</div>
             <div class="analysis-trend" id="shChange">--</div>
         </a>
-        <a href="/stock/sz399001" class="analysis-item" style="text-decoration:none; cursor:pointer;">
+        <a href="/stock/sz399001" class="analysis-item" style="text-decoration:none; cursor:pointer; color:inherit;">
             <div class="analysis-indicator">深证成指</div>
-            <div class="analysis-signal" id="szIndex">--</div>
+            <div class="analysis-signal up" id="szIndex">--</div>
             <div class="analysis-trend" id="szChange">--</div>
         </a>
-        <a href="/stock/sz399006" class="analysis-item" style="text-decoration:none; cursor:pointer;">
+        <a href="/stock/sz399006" class="analysis-item" style="text-decoration:none; cursor:pointer; color:inherit;">
             <div class="analysis-indicator">创业板指</div>
-            <div class="analysis-signal" id="cyIndex">--</div>
+            <div class="analysis-signal up" id="cyIndex">--</div>
             <div class="analysis-trend" id="cyChange">--</div>
         </a>
     </div>
@@ -141,10 +141,12 @@
     // Load market indices
     function loadMarketIndices() {
         // Shanghai Composite
-        fetch('/api/quote/000001')
+        fetch('/api/quote/sh000001')
             .then(res => res.json())
             .then(data => {
-                document.getElementById('shIndex').textContent = data.price.toFixed(2);
+                const el = document.getElementById('shIndex');
+                el.textContent = data.price.toFixed(2);
+                el.className = 'analysis-signal ' + (data.changePercent >= 0 ? 'up' : 'down');
                 const changeClass = data.changePercent >= 0 ? 'up' : 'down';
                 const sign = data.changePercent >= 0 ? '+' : '';
                 document.getElementById('shChange').innerHTML = 
@@ -155,10 +157,12 @@
             });
 
         // Shenzhen Component
-        fetch('/api/quote/399001')
+        fetch('/api/quote/sz399001')
             .then(res => res.json())
             .then(data => {
-                document.getElementById('szIndex').textContent = data.price.toFixed(2);
+                const el = document.getElementById('szIndex');
+                el.textContent = data.price.toFixed(2);
+                el.className = 'analysis-signal ' + (data.changePercent >= 0 ? 'up' : 'down');
                 const changeClass = data.changePercent >= 0 ? 'up' : 'down';
                 const sign = data.changePercent >= 0 ? '+' : '';
                 document.getElementById('szChange').innerHTML = 
@@ -169,10 +173,12 @@
             });
 
         // ChiNext
-        fetch('/api/quote/399006')
+        fetch('/api/quote/sz399006')
             .then(res => res.json())
             .then(data => {
-                document.getElementById('cyIndex').textContent = data.price.toFixed(2);
+                const el = document.getElementById('cyIndex');
+                el.textContent = data.price.toFixed(2);
+                el.className = 'analysis-signal ' + (data.changePercent >= 0 ? 'up' : 'down');
                 const changeClass = data.changePercent >= 0 ? 'up' : 'down';
                 const sign = data.changePercent >= 0 ? '+' : '';
                 document.getElementById('cyChange').innerHTML = 
