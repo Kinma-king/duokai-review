@@ -742,8 +742,22 @@ def compute_indicator_weights(klines, min_samples=30):
         if best_win:
             win_stats['best_window'] = best_win
             win_stats['best_accuracy'] = best_acc
-            # 权重: 至少保底 10%
-            win_stats['weight'] = round(max(10, best_acc) / 100, 3)
+    
+    # 归一化：所有权重之和 = 1.0
+    total_best = sum(s.get('best_accuracy', 0) for s in stats.values())
+    for ind_id, win_stats in stats.items():
+        if 'best_accuracy' in win_stats and total_best > 0:
+            # raw_weight = best_accuracy / total_best，保底 10% 后再归一化
+            raw = win_stats['best_accuracy'] / total_best
+            floor = 0.10 / len(stats) if len(stats) > 0 else 0.01
+            win_stats['weight'] = round(max(raw, floor), 4)
+    
+    # 二次归一化保证和严格等于 1
+    total_w = sum(s.get('weight', 0) for s in stats.values())
+    if total_w > 0:
+        for s in stats.values():
+            if 'weight' in s:
+                s['weight'] = round(s['weight'] / total_w, 4)
     
     return stats
 
