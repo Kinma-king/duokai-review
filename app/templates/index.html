@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}多开复盘 - 首页{% endblock %}
+
+{% block content %}
+<!-- Market Overview -->
+<div class="card">
+    <div class="card-title">
+        <span>🔥 热门股票</span>
+        <span style="font-size: 12px; color: var(--text-secondary);">实时行情</span>
+    </div>
+    <div class="stock-list" id="hotStocks">
+        <div class="loading">
+            <div class="spinner"></div>
+            加载中...
+        </div>
+    </div>
+</div>
+
+<!-- Market Stats -->
+<div class="card">
+    <div class="card-title">
+        <span>📊 市场概况</span>
+    </div>
+    <div class="analysis-grid" id="marketStats">
+        <div class="analysis-item">
+            <div class="analysis-indicator">上证指数</div>
+            <div class="analysis-signal" id="shIndex">--</div>
+            <div class="analysis-trend" id="shChange">--</div>
+        </div>
+        <div class="analysis-item">
+            <div class="analysis-indicator">深证成指</div>
+            <div class="analysis-signal" id="szIndex">--</div>
+            <div class="analysis-trend" id="szChange">--</div>
+        </div>
+        <div class="analysis-item">
+            <div class="analysis-indicator">创业板指</div>
+            <div class="analysis-signal" id="cyIndex">--</div>
+            <div class="analysis-trend" id="cyChange">--</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Load hot stocks
+    function loadHotStocks() {
+        fetch('/api/hot')
+            .then(res => res.json())
+            .then(stocks => {
+                const container = document.getElementById('hotStocks');
+                container.innerHTML = '';
+                
+                stocks.forEach(stock => {
+                    // Fetch quote for each stock
+                    fetch(`/api/quote/${stock.code}`)
+                        .then(res => res.json())
+                        .then(quote => {
+                            const changeClass = quote.changePercent >= 0 ? 'up' : 'down';
+                            const changeSign = quote.changePercent >= 0 ? '+' : '';
+                            
+                            const item = document.createElement('a');
+                            item.className = 'stock-item';
+                            item.href = `/stock/${stock.code}`;
+                            item.innerHTML = `
+                                <div class="stock-info">
+                                    <div class="stock-name">${stock.name}</div>
+                                    <div class="stock-code">${stock.code}</div>
+                                </div>
+                                <div class="stock-price">
+                                    <div class="stock-price-value ${changeClass}">${quote.price.toFixed(2)}</div>
+                                    <div class="stock-change ${changeClass}">${changeSign}${quote.changePercent.toFixed(2)}%</div>
+                                </div>
+                            `;
+                            container.appendChild(item);
+                        })
+                        .catch(() => {
+                            // If quote fails, show basic info
+                            const item = document.createElement('a');
+                            item.className = 'stock-item';
+                            item.href = `/stock/${stock.code}`;
+                            item.innerHTML = `
+                                <div class="stock-info">
+                                    <div class="stock-name">${stock.name}</div>
+                                    <div class="stock-code">${stock.code}</div>
+                                </div>
+                                <div class="stock-price">
+                                    <div class="stock-price-value">--</div>
+                                    <div class="stock-change">--</div>
+                                </div>
+                            `;
+                            container.appendChild(item);
+                        });
+                });
+            });
+    }
+
+    // Load market indices
+    function loadMarketIndices() {
+        // Shanghai Composite
+        fetch('/api/quote/000001')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('shIndex').textContent = data.price.toFixed(2);
+                const changeClass = data.changePercent >= 0 ? 'up' : 'down';
+                const sign = data.changePercent >= 0 ? '+' : '';
+                document.getElementById('shChange').innerHTML = 
+                    `<span class="${changeClass}">${sign}${data.changePercent.toFixed(2)}%  ${sign}${data.change.toFixed(2)}</span>`;
+            })
+            .catch(() => {
+                document.getElementById('shIndex').textContent = '---';
+            });
+
+        // Shenzhen Component
+        fetch('/api/quote/399001')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('szIndex').textContent = data.price.toFixed(2);
+                const changeClass = data.changePercent >= 0 ? 'up' : 'down';
+                const sign = data.changePercent >= 0 ? '+' : '';
+                document.getElementById('szChange').innerHTML = 
+                    `<span class="${changeClass}">${sign}${data.changePercent.toFixed(2)}%  ${sign}${data.change.toFixed(2)}</span>`;
+            })
+            .catch(() => {
+                document.getElementById('szIndex').textContent = '---';
+            });
+
+        // ChiNext
+        fetch('/api/quote/399006')
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('cyIndex').textContent = data.price.toFixed(2);
+                const changeClass = data.changePercent >= 0 ? 'up' : 'down';
+                const sign = data.changePercent >= 0 ? '+' : '';
+                document.getElementById('cyChange').innerHTML = 
+                    `<span class="${changeClass}">${sign}${data.changePercent.toFixed(2)}%  ${sign}${data.change.toFixed(2)}</span>`;
+            })
+            .catch(() => {
+                document.getElementById('cyIndex').textContent = '---';
+            });
+    }
+
+    // Initial load
+    loadHotStocks();
+    loadMarketIndices();
+
+    // Auto refresh every 30 seconds
+    setInterval(() => {
+        loadHotStocks();
+        loadMarketIndices();
+    }, 30000);
+</script>
+{% endblock %}

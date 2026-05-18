@@ -1,0 +1,579 @@
+{% extends "base.html" %}
+
+{% block title %}{{ code }} - 股票详情{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-badge {
+        display: inline-block;
+        width: 16px; height: 16px;
+        border-radius: 50%;
+        background: var(--accent-color);
+        color: #000;
+        font-size: 10px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 16px;
+        cursor: pointer;
+        margin-left: 2px;
+        vertical-align: top;
+    }
+    .info-badge:hover { background: #fff; }
+
+    /* Modal */
+    .modal-overlay {
+        display: none;
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.7);
+        z-index: 999;
+        align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    .modal h3 { color: var(--accent-color); margin-bottom: 8px; }
+    .modal .meta { color: var(--text-secondary); font-size: 12px; margin-bottom: 16px; }
+    .modal .principle { white-space: pre-line; color: var(--text-primary); font-size: 14px; line-height: 1.8; }
+    .modal .close-btn {
+        float: right;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        padding: 4px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    /* Accuracy colors */
+    .accuracy-correct { color: #52c41a; }
+    .accuracy-wrong { color: #ff4d4f; }
+    .accuracy-neutral { color: #faad14; }
+
+    .comparison-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+        font-size: 12px;
+    }
+    .comparison-table th, .comparison-table td {
+        padding: 6px 8px;
+        border: 1px solid var(--border-color);
+        text-align: center;
+    }
+    .comparison-table th { background: var(--bg-tertiary); color: var(--text-secondary); }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Stock Header -->
+<div class="card">
+    <div class="card-title">
+        <span id="stockName">加载中...</span>
+        <span id="stockCode" style="font-size: 14px; color: var(--text-secondary);">{{ code }}</span>
+    </div>
+    <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;">
+        <span id="currentPrice" style="font-size: 32px; font-weight: bold;">--</span>
+        <span id="priceChange" style="font-size: 16px;">--</span>
+        <span id="priceChangePercent" style="font-size: 16px;">--</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-top: 16px; font-size: 13px; color: var(--text-secondary);">
+        <div>今开: <span id="openPrice" style="color: var(--text-primary);">--</span></div>
+        <div>最高: <span id="highPrice" style="color: var(--text-primary);">--</span></div>
+        <div>最低: <span id="lowPrice" style="color: var(--text-primary);">--</span></div>
+        <div>昨收: <span id="preClose" style="color: var(--text-primary);">--</span></div>
+        <div>成交量: <span id="volume" style="color: var(--text-primary);">--</span></div>
+        <div>成交额: <span id="amount" style="color: var(--text-primary);">--</span></div>
+    </div>
+</div>
+
+<!-- K Line Chart -->
+<div class="card">
+    <div class="card-title">
+        <span>K线图</span>
+        <div class="period-selector">
+            <button class="period-btn active" data-period="day" onclick="switchPeriod('day')">日线</button>
+            <button class="period-btn" data-period="week" onclick="switchPeriod('week')">周线</button>
+            <button class="period-btn" data-period="month" onclick="switchPeriod('month')">月线</button>
+        </div>
+    </div>
+    <div class="chart-container" id="klineChart"></div>
+</div>
+
+<!-- Technical Indicators Chart -->
+<div class="card">
+    <div class="card-title">
+        <span>技术指标</span>
+        <div class="period-selector" style="flex-wrap: wrap;">
+            <button class="period-btn active" data-indicator="macd" onclick="switchIndicator('macd')">MACD<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('MACD')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="kdj" onclick="switchIndicator('kdj')">KDJ<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('KDJ')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="rsi" onclick="switchIndicator('rsi')">RSI<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('RSI')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="boll" onclick="switchIndicator('boll')">BOLL<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('BOLL')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="obv" onclick="switchIndicator('obv')">OBV<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('OBV')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="wr" onclick="switchIndicator('wr')">WR<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('WR')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="cci" onclick="switchIndicator('cci')">CCI<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('CCI')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="bias" onclick="switchIndicator('bias')">BIAS<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('BIAS')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="psy" onclick="switchIndicator('psy')">PSY<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('PSY')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="vr" onclick="switchIndicator('vr')">VR<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('VR')">ⓘ</span></button>
+        </div>
+    </div>
+    <div class="chart-container" id="indicatorChart" style="height: 250px;"></div>
+</div>
+
+<!-- Technical Analysis -->
+<div class="card">
+    <div class="card-title">
+        <span>📊 技术分析</span>
+        <span id="analysisScore" style="font-size: 14px;">--</span>
+    </div>
+    <div class="analysis-grid" id="analysisContent">
+        <div class="loading">
+            <div class="spinner"></div>
+            分析中...
+        </div>
+    </div>
+</div>
+
+<!-- Clicked Candle Info -->
+<div class="card" id="candleInfo" style="display: none;">
+    <div class="card-title">
+        <span>📅 点位分析</span>
+        <span id="candleDate" style="font-size: 14px; color: var(--text-secondary);"></span>
+    </div>
+    <div id="pointPrediction" style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px;"></div>
+    <div class="analysis-grid" id="candleDetails"></div>
+    <div id="accuracyComparison" style="margin-top: 16px;"></div>
+</div>
+
+<!-- Indicator Info Modal -->
+<div class="modal-overlay" id="indicatorModal">
+    <div class="modal">
+        <button class="close-btn" onclick="closeIndicatorInfo()">✕</button>
+        <h3 id="modalTitle"></h3>
+        <div class="meta" id="modalMeta"></div>
+        <div class="principle" id="modalPrinciple"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const code = '{{ code }}';
+    let klineChart, indicatorChart;
+    let currentPeriod = 'day';
+    let currentIndicator = 'macd';
+    let klineData = [];
+    let indicatorInfoCache = {};
+
+    // Initialize charts
+    function initCharts() {
+        klineChart = echarts.init(document.getElementById('klineChart'));
+        indicatorChart = echarts.init(document.getElementById('indicatorChart'));
+        
+        klineChart.on('click', function(params) {
+            if (params.componentType === 'series') {
+                showCandleInfo(params.dataIndex);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            klineChart.resize();
+            indicatorChart.resize();
+        });
+    }
+
+    // Load stock quote
+    function loadQuote() {
+        fetch(`/api/quote/${code}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('stockName').textContent = data.name || code;
+                document.getElementById('currentPrice').textContent = data.price.toFixed(2);
+                
+                const changeClass = data.changePercent >= 0 ? 'up' : 'down';
+                const sign = data.changePercent >= 0 ? '+' : '';
+                
+                document.getElementById('currentPrice').className = changeClass;
+                document.getElementById('priceChange').innerHTML = `<span class="${changeClass}">${sign}${data.change.toFixed(2)}</span>`;
+                document.getElementById('priceChangePercent').innerHTML = `<span class="${changeClass}">${sign}${data.changePercent.toFixed(2)}%</span>`;
+                
+                document.getElementById('openPrice').textContent = data.open.toFixed(2);
+                document.getElementById('highPrice').textContent = data.high.toFixed(2);
+                document.getElementById('lowPrice').textContent = data.low.toFixed(2);
+                document.getElementById('preClose').textContent = data.preClose.toFixed(2);
+                document.getElementById('volume').textContent = formatVolume(data.volume);
+                document.getElementById('amount').textContent = formatAmount(data.amount);
+            })
+            .catch(err => console.error('Quote error:', err));
+    }
+
+    // Load K-line data
+    function loadKline(period = 'day') {
+        fetch(`/api/kline/${code}?period=${period}&count=120`)
+            .then(res => res.json())
+            .then(data => {
+                klineData = data;
+                renderKlineChart(data);
+                renderIndicatorChart(data, currentIndicator);
+            })
+            .catch(err => console.error('Kline error:', err));
+    }
+
+    // Render K-line chart
+    function renderKlineChart(data) {
+        const dates = data.map(d => d.date);
+        const values = data.map(d => [d.open, d.close, d.low, d.high]);
+        const ma5 = data.map(d => d.MA5);
+        const ma10 = data.map(d => d.MA10);
+        const ma20 = data.map(d => d.MA20);
+        const ma60 = data.map(d => d.MA60);
+
+        const option = {
+            backgroundColor: 'transparent', animation: false,
+            tooltip: {
+                trigger: 'axis', axisPointer: { type: 'cross' },
+                backgroundColor: 'rgba(13, 17, 23, 0.95)',
+                borderColor: '#30363d', textStyle: { color: '#c9d1d9' }
+            },
+            grid: { left: '3%', right: '3%', bottom: '15%', top: '10%', containLabel: true },
+            xAxis: {
+                type: 'category', data: dates,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e' }
+            },
+            yAxis: {
+                scale: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                splitLine: { lineStyle: { color: '#21262d' } },
+                axisLabel: { color: '#8b949e' }
+            },
+            dataZoom: [
+                { type: 'inside', start: 50, end: 100 },
+                {
+                    type: 'slider', start: 50, end: 100, height: 20, bottom: 0,
+                    borderColor: '#30363d', fillerColor: 'rgba(88, 166, 255, 0.2)',
+                    handleStyle: { color: '#58a6ff' }, textStyle: { color: '#8b949e' }
+                }
+            ],
+            series: [
+                {
+                    name: 'K线', type: 'candlestick', data: values,
+                    itemStyle: { color: '#ff4d4f', color0: '#52c41a', borderColor: '#ff4d4f', borderColor0: '#52c41a' }
+                },
+                { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
+                { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { color: '#ff69b4', width: 1 }, symbol: 'none' },
+                { name: 'MA60', type: 'line', data: ma60, smooth: true, lineStyle: { color: '#7fff00', width: 1 }, symbol: 'none' }
+            ]
+        };
+        klineChart.setOption(option);
+    }
+
+    // Render indicator chart
+    function renderIndicatorChart(data, indicator) {
+        const dates = data.map(d => d.date);
+        let series = [];
+        let yAxisName = '';
+
+        switch(indicator) {
+            case 'macd':
+                series = [
+                    { name: 'DIF', type: 'line', data: data.map(d => d.MACD), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                    { name: 'DEA', type: 'line', data: data.map(d => d.MACD_SIGNAL), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
+                    { name: 'MACD', type: 'bar', data: data.map(d => d.MACD_HIST),
+                        itemStyle: { color: function(p) { return p.value >= 0 ? '#ff4d4f' : '#52c41a'; } }
+                    }
+                ];
+                yAxisName = 'MACD';
+                break;
+            case 'kdj':
+                series = [
+                    { name: 'K', type: 'line', data: data.map(d => d.K), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                    { name: 'D', type: 'line', data: data.map(d => d.D), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
+                    { name: 'J', type: 'line', data: data.map(d => d.J), lineStyle: { color: '#ff69b4', width: 1 }, symbol: 'none' },
+                ];
+                yAxisName = 'KDJ';
+                break;
+            case 'rsi':
+                series = [{
+                    name: 'RSI', type: 'line', data: data.map(d => d.RSI),
+                    lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none',
+                    markLine: { data: [{ yAxis: 70, lineStyle: { color: '#ff4d4f' } }, { yAxis: 30, lineStyle: { color: '#52c41a' } }] }
+                }];
+                yAxisName = 'RSI';
+                break;
+            case 'boll':
+                series = [
+                    { name: '上轨', type: 'line', data: data.map(d => d.BOLL_UP), lineStyle: { color: '#ff4d4f', width: 1 }, symbol: 'none' },
+                    { name: '中轨', type: 'line', data: data.map(d => d.BOLL_MID), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                    { name: '下轨', type: 'line', data: data.map(d => d.BOLL_DOWN), lineStyle: { color: '#52c41a', width: 1 }, symbol: 'none' }
+                ];
+                yAxisName = 'BOLL';
+                break;
+            case 'obv':
+                series = [{
+                    name: 'OBV', type: 'line', data: data.map(d => d.OBV),
+                    lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none',
+                    areaStyle: { color: 'rgba(88, 166, 255, 0.1)' }
+                }];
+                yAxisName = 'OBV';
+                break;
+            case 'wr':
+                series = [{
+                    name: 'WR', type: 'line', data: data.map(d => d.WR ? -Math.abs(d.WR) : null),
+                    lineStyle: { color: '#ff69b4', width: 1 }, symbol: 'none',
+                    markLine: { data: [{ yAxis: -20, lineStyle: { color: '#ff4d4f' } }, { yAxis: -80, lineStyle: { color: '#52c41a' } }] }
+                }];
+                yAxisName = 'WR';
+                break;
+            case 'cci':
+                series = [{
+                    name: 'CCI', type: 'line', data: data.map(d => d.CCI),
+                    lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none',
+                    markLine: { data: [{ yAxis: 100, lineStyle: { color: '#ff4d4f' } }, { yAxis: -100, lineStyle: { color: '#52c41a' } }] }
+                }];
+                yAxisName = 'CCI';
+                break;
+            case 'bias':
+                series = [
+                    { name: 'BIAS6', type: 'line', data: data.map(d => d.BIAS6), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                    { name: 'BIAS12', type: 'line', data: data.map(d => d.BIAS12), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
+                    { name: 'BIAS24', type: 'line', data: data.map(d => d.BIAS24), lineStyle: { color: '#ff69b4', width: 1 }, symbol: 'none' },
+                ];
+                yAxisName = 'BIAS';
+                break;
+            case 'psy':
+                series = [{
+                    name: 'PSY', type: 'line', data: data.map(d => d.PSY),
+                    lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none',
+                    markLine: { data: [{ yAxis: 75, lineStyle: { color: '#ff4d4f' } }, { yAxis: 25, lineStyle: { color: '#52c41a' } }] }
+                }];
+                yAxisName = 'PSY';
+                break;
+            case 'vr':
+                series = [{
+                    name: 'VR', type: 'line', data: data.map(d => d.VR),
+                    lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none',
+                    markLine: { data: [{ yAxis: 450, lineStyle: { color: '#ff4d4f' } }, { yAxis: 70, lineStyle: { color: '#52c41a' } }] }
+                }];
+                yAxisName = 'VR';
+                break;
+        }
+
+        const option = {
+            backgroundColor: 'transparent', animation: false,
+            tooltip: {
+                trigger: 'axis',
+                backgroundColor: 'rgba(13, 17, 23, 0.95)',
+                borderColor: '#30363d', textStyle: { color: '#c9d1d9' }
+            },
+            grid: { left: '3%', right: '3%', bottom: '10%', top: '15%', containLabel: true },
+            xAxis: {
+                type: 'category', data: dates,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                axisLabel: { color: '#8b949e' }
+            },
+            yAxis: {
+                name: yAxisName, nameTextStyle: { color: '#8b949e' },
+                scale: true,
+                axisLine: { lineStyle: { color: '#30363d' } },
+                splitLine: { lineStyle: { color: '#21262d' } },
+                axisLabel: { color: '#8b949e' }
+            },
+            dataZoom: [{ type: 'inside', start: 50, end: 100 }],
+            series: series
+        };
+        indicatorChart.setOption(option, true);
+    }
+
+    // Show candle info — now with point analysis
+    function showCandleInfo(index) {
+        const data = klineData[index];
+        if (!data) return;
+
+        const date = data.date;
+        document.getElementById('candleInfo').style.display = 'block';
+        document.getElementById('candleDate').textContent = date;
+
+        // Basic candle details
+        const changeClass = data.changePercent >= 0 ? 'up' : 'down';
+        const sign = data.changePercent >= 0 ? '+' : '';
+
+        const details = document.getElementById('candleDetails');
+        details.innerHTML = `
+            <div class="analysis-item"><div class="analysis-indicator">开盘价</div><div class="analysis-signal">${data.open.toFixed(2)}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">收盘价</div><div class="analysis-signal ${changeClass}">${data.close.toFixed(2)}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">最高价</div><div class="analysis-signal">${data.high.toFixed(2)}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">最低价</div><div class="analysis-signal">${data.low.toFixed(2)}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">涨跌幅</div><div class="analysis-signal ${changeClass}">${sign}${data.changePercent.toFixed(2)}%</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">成交量</div><div class="analysis-signal">${formatVolume(data.volume)}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">MA5</div><div class="analysis-signal">${data.MA5 != null ? data.MA5.toFixed(2) : '--'}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">MA20</div><div class="analysis-signal">${data.MA20 != null ? data.MA20.toFixed(2) : '--'}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">RSI</div><div class="analysis-signal">${data.RSI != null ? data.RSI.toFixed(2) : '--'}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">MACD</div><div class="analysis-signal">${data.MACD != null ? data.MACD.toFixed(4) : '--'}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">K</div><div class="analysis-signal">${data.K != null ? data.K.toFixed(2) : '--'}</div></div>
+            <div class="analysis-item"><div class="analysis-indicator">CCI</div><div class="analysis-signal">${data.CCI != null ? data.CCI.toFixed(2) : '--'}</div></div>
+        `;
+
+        // Fetch point analysis from API
+        document.getElementById('pointPrediction').innerHTML = '<div class="loading"><div class="spinner"></div>点位分析中...</div>';
+        document.getElementById('accuracyComparison').innerHTML = '';
+
+        fetch(`/api/point-analysis/${code}/${date}`)
+            .then(res => res.json())
+            .then(pa => {
+                if (pa.error) {
+                    document.getElementById('pointPrediction').innerHTML = `<span style="color: var(--text-secondary);">${pa.error}</span>`;
+                    return;
+                }
+
+                let predHtml = `<strong>📈 综合分析</strong><br>`;
+                predHtml += `当日预测: <span style="color: ${pa.prediction === '看涨' ? '#52c41a' : pa.prediction === '看跌' ? '#ff4d4f' : '#faad14'}; font-size: 18px; font-weight: bold;">${pa.prediction}</span> `;
+                predHtml += `(置信度: ${pa.confidence})<br>`;
+
+                // Accuracy
+                if (pa.accuracy) {
+                    const accClass = pa.accuracy.includes('正确') ? 'accuracy-correct' : pa.accuracy === '中性' ? 'accuracy-neutral' : 'accuracy-wrong';
+                    predHtml += `准确性验证: <span class="${accClass}" style="font-weight: bold;">${pa.accuracy}</span>`;
+                }
+
+                // Signals
+                if (pa.signals && pa.signals.length > 0) {
+                    predHtml += `<br><br><strong>信号:</strong><br>`;
+                    pa.signals.forEach(s => {
+                        predHtml += `• ${s.indicator}: ${s.signal} (${s.trend}, ${s.strength})<br>`;
+                    });
+                }
+                document.getElementById('pointPrediction').innerHTML = predHtml;
+
+                // Accuracy comparison table
+                if (pa.comparison) {
+                    let compHtml = '<strong>📉 后续真实走势 vs 预测</strong>';
+                    compHtml += '<table class="comparison-table"><thead><tr><th>日期</th><th>收盘价</th><th>涨跌幅</th></tr></thead><tbody>';
+                    pa.comparison.subsequent.forEach(s => {
+                        const cls = s.change_pct >= 0 ? 'up' : 'down';
+                        const sn = s.change_pct >= 0 ? '+' : '';
+                        compHtml += `<tr><td>${s.date}</td><td>${s.close.toFixed(2)}</td><td class="${cls}">${sn}${s.change_pct.toFixed(2)}%</td></tr>`;
+                    });
+                    compHtml += '</tbody></table>';
+                    document.getElementById('accuracyComparison').innerHTML = compHtml;
+                }
+            })
+            .catch(err => {
+                document.getElementById('pointPrediction').innerHTML = `<span style="color: var(--text-secondary);">分析失败: ${err}</span>`;
+            });
+
+        document.getElementById('candleInfo').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Load technical analysis
+    function loadAnalysis() {
+        fetch(`/api/analysis/${code}`)
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('analysisScore').innerHTML = 
+                    `综合评分: <span style="color: ${data.score >= 50 ? '#52c41a' : '#ff4d4f'};">${data.score}</span> - ${data.overall}`;
+                const container = document.getElementById('analysisContent');
+                container.innerHTML = '';
+                if (data.signals && data.signals.length > 0) {
+                    data.signals.forEach(signal => {
+                        const item = document.createElement('div');
+                        item.className = `analysis-item ${signal.trend === '买入' || signal.trend === '上涨' ? 'buy' : signal.trend === '卖出' || signal.trend === '下跌' ? 'sell' : ''}`;
+                        item.innerHTML = `
+                            <div class="analysis-indicator">${signal.indicator}</div>
+                            <div class="analysis-signal">${signal.signal}</div>
+                            <div class="analysis-trend">趋势: ${signal.trend} | 强度: ${signal.strength}</div>
+                        `;
+                        container.appendChild(item);
+                    });
+                } else {
+                    container.innerHTML = '<div style="color: var(--text-secondary);">暂无明确信号</div>';
+                }
+            })
+            .catch(err => {
+                document.getElementById('analysisContent').innerHTML = '<div style="color: var(--text-secondary);">分析数据加载失败</div>';
+            });
+    }
+
+    // Switch period
+    function switchPeriod(period) {
+        currentPeriod = period;
+        document.querySelectorAll('[data-period]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.period === period);
+        });
+        loadKline(period);
+    }
+
+    // Switch indicator
+    function switchIndicator(indicator) {
+        currentIndicator = indicator;
+        document.querySelectorAll('[data-indicator]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.indicator === indicator);
+        });
+        renderIndicatorChart(klineData, indicator);
+    }
+
+    // Indicator info modal
+    function showIndicatorInfo(indicator) {
+        // Use cache
+        if (indicatorInfoCache[indicator]) {
+            openModal(indicatorInfoCache[indicator]);
+            return;
+        }
+        fetch(`/api/indicator-info/${indicator}`)
+            .then(res => res.json())
+            .then(info => {
+                indicatorInfoCache[indicator] = info;
+                openModal(info);
+            })
+            .catch(err => console.error('Indicator info error:', err));
+    }
+
+    function openModal(info) {
+        document.getElementById('modalTitle').textContent = info.name;
+        document.getElementById('modalMeta').textContent = `作者: ${info.author || '--'} | 类别: ${info.category || '--'}`;
+        document.getElementById('modalPrinciple').textContent = info.desc + '\n\n📖 使用法则:\n' + info.principle;
+        document.getElementById('indicatorModal').classList.add('active');
+    }
+
+    function closeIndicatorInfo() {
+        document.getElementById('indicatorModal').classList.remove('active');
+    }
+
+    // Close modal on overlay click
+    document.addEventListener('click', function(e) {
+        if (e.target.id === 'indicatorModal') {
+            closeIndicatorInfo();
+        }
+    });
+
+    // Format helpers
+    function formatVolume(vol) {
+        if (vol >= 100000000) return (vol / 100000000).toFixed(2) + '亿';
+        if (vol >= 10000) return (vol / 10000).toFixed(2) + '万';
+        return vol.toString();
+    }
+
+    function formatAmount(amt) {
+        if (amt >= 100000000) return (amt / 100000000).toFixed(2) + '亿';
+        if (amt >= 10000) return (amt / 10000).toFixed(2) + '万';
+        return amt.toFixed(2);
+    }
+
+    // Initialize
+    initCharts();
+    loadQuote();
+    loadKline('day');
+    loadAnalysis();
+
+    // Auto refresh quote every 30s
+    setInterval(() => { loadQuote(); }, 30000);
+</script>
+{% endblock %}
