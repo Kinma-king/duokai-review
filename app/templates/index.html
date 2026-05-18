@@ -64,40 +64,25 @@
         <button class="close-btn" onclick="document.getElementById('guideModal').style.display='none'">✕</button>
         <h3 style="margin-bottom: 16px;">📖 多开复盘 — 使用指南</h3>
         
-        <div style="line-height: 1.8; color: var(--text-primary); font-size: 14px;">
-            <p><strong>1. 搜索股票</strong><br>
-            顶部搜索框输入股票代码或名称，按 <kbd>Enter</kbd> 直接跳转到第一条结果。</p>
+        <div style="line-height: 1.9; color: var(--text-primary); font-size: 14px;">
+            <p><strong>1. 进入个股页面</strong><br>
+            在首页点击「大盘」中的指数、或「热门股票」中的任意股票、或顶部搜索框输入股票代码/名称后回车，均可进入该标的的个股分析页面。</p>
             
-            <p><strong>2. 大盘指数</strong><br>
-            首页大盘栏展示上证/深证/创业板实时行情（<span style="color:#ff4d4f;">红涨</span><span style="color:#52c41a;">绿跌</span>），点击任一指数进入详情分析页。</p>
+            <p><strong>2. 查看历史走势</strong><br>
+            K 线图和技术指标图均支持<strong>鼠标滚轮缩放</strong>和<strong>拖动平移</strong>，可自由查看任意历史区间的真实走势。<br>
+            两张图缩放联动，指标栏可切换 12 项技术指标（成交量、MA、MACD、KDJ、RSI、BOLL、OBV、WR、CCI、BIAS、PSY、VR）。</p>
             
-            <p><strong>3. K 线图操作</strong><br>
-            进入个股页后，在 K 线图或技术指标图上<strong>任意位置点击</strong>，会出现蓝色竖线标记当天，并弹出「点位分析」面板。<br>
-            两张图的缩放和拖动<strong>自动同步</strong>，切换指标时竖线不会丢失。</p>
+            <p><strong>3. 时点技术分析</strong><br>
+            在 K 线图或指标图上<strong>任意位置点击</strong>，蓝色虚线定位到当天，弹出「点位分析」面板。<br>
+            面板展示该日 12 项指标的独立预测及<strong>正确/错误</strong>验证（与后续实际走势对比）。<br>
+            点击<strong>最新一天</strong>（最右侧），可查看对未来的实时预测。</p>
             
-            <p><strong>4. 五窗口预测（核心功能）</strong><br>
-            点击某天后，系统用该天<strong>之前 1060 根 K 线</strong>训练 12 项技术指标的权重，分别在 T+1 / T+3 / T+5 / T+10 / T+30 五个时间窗口上计算胜率并归一化。<br>
-            每个时间窗口独立预测，点击上方 Tab 切换查看不同周期的加权评分。<br>
-            <em>例：想看 5 天后走势 → 点「T+5日」Tab → 该窗口用各指标在 T+5 的胜率赋权</em></p>
-            
-            <p><strong>5. 加权评分含义</strong><br>
-            📊 看涨/看跌：各指标按该窗口胜率加权投票的结果<br>
-            置信度：加权看多/看空占比（差距 < 5% 时显示震荡）<br>
-            ✅/❌：加权预测 vs 该窗口实际走势的验证结果</p>
-            
-            <p><strong>6. 颜色约定（全站统一）</strong><br>
-            🔴 <span style="color:#ff4d4f;">红色</span> = 上涨 / 看涨 / 阳线<br>
-            🟢 <span style="color:#52c41a;">绿色</span> = 下跌 / 看跌 / 阴线<br>
-            K 线蜡烛、指标数值、综合评分均遵循此规则。</p>
-            
-            <p><strong>7. 技术指标</strong><br>
-            共 12 项：成交量 → MA → MACD → KDJ → RSI → BOLL → OBV → WR → CCI → BIAS → PSY → VR<br>
-            点击指标名称可查看原理公式和使用法则。</p>
-            
-            <p><strong>8. 注意事项</strong><br>
-            • 数据来源腾讯财经接口，仅供个人学习研究，不构成投资建议<br>
-            • 训练数据仅使用选中日期之前的历史数据，无未来信息泄露<br>
-            • 每只股票独立训练权重，不跨股</p>
+            <p><strong>4. 权重计算与预测方法</strong><br>
+            系统取选中日期<strong>之前最多 1060 根 K 线</strong>作为训练数据（不含未来），在 T+1 / T+3 / T+5 / T+10 / T+30 五个时间窗口上分别回测：<br>
+            • 每个窗口独立统计各指标的预测胜率<br>
+            • 胜率归一化为权重（窗口内所有权重之和 = 100%）<br>
+            • 当前时点用该窗口权重对 12 项指标加权投票，得到<strong>加权评分</strong>（看涨/看跌 + 置信度）<br>
+            切换顶部 Tab 即可查看不同周期的预测结果，每个周期还标注了 ✅ 正确 或 ❌ 错误的实际验证。</p>
         </div>
     </div>
 </div>
