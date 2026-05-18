@@ -288,7 +288,32 @@
             tooltip: {
                 trigger: 'axis', axisPointer: { type: 'cross' },
                 backgroundColor: 'rgba(13, 17, 23, 0.95)',
-                borderColor: '#30363d', textStyle: { color: '#c9d1d9' }
+                borderColor: '#30363d', textStyle: { color: '#c9d1d9' },
+                formatter: function(params) {
+                    if (!params || !params.length) return '';
+                    const date = params[0].axisValue;
+                    let html = `<strong style="font-size:14px;">${date}</strong><br>`;
+                    // K线数据
+                    const k = params.find(p => p.seriesName === 'K线');
+                    if (k && k.data) {
+                        const o = k.data[0], c = k.data[1], l = k.data[2], h = k.data[3];
+                        const isUp = c >= o;
+                        const clr = isUp ? '#ff4d4f' : '#52c41a';
+                        html += `<span style="color:#8b949e;">开盘</span> <span style="color:${clr};">${o.toFixed(2)}</span><br>`;
+                        html += `<span style="color:#8b949e;">收盘</span> <span style="color:${clr};">${c.toFixed(2)}</span><br>`;
+                        html += `<span style="color:#8b949e;">最低</span> <span style="color:${clr};">${l.toFixed(2)}</span><br>`;
+                        html += `<span style="color:#8b949e;">最高</span> <span style="color:${clr};">${h.toFixed(2)}</span><br>`;
+                    }
+                    // MA 线
+                    const maColors = {'MA5':'#ffd700','MA10':'#00ffff','MA20':'#ff69b4','MA60':'#7fff00'};
+                    params.forEach(p => {
+                        if (p.seriesName in maColors && p.value != null) {
+                            html += `<span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${maColors[p.seriesName]}; margin-right:4px;"></span>`;
+                            html += `<span style="color:#8b949e;">${p.seriesName}</span> <span style="color:${maColors[p.seriesName]};">${Number(p.value).toFixed(2)}</span><br>`;
+                        }
+                    });
+                    return html;
+                }
             },
             grid: { left: '3%', right: '3%', bottom: '15%', top: '10%', containLabel: true },
             xAxis: {
@@ -443,7 +468,21 @@
             tooltip: {
                 trigger: 'axis',
                 backgroundColor: 'rgba(13, 17, 23, 0.95)',
-                borderColor: '#30363d', textStyle: { color: '#c9d1d9' }
+                borderColor: '#30363d', textStyle: { color: '#c9d1d9' },
+                formatter: function(params) {
+                    if (!params || !params.length) return '';
+                    const date = params[0].axisValue;
+                    let html = `<strong style="font-size:13px;">${date}</strong><br>`;
+                    params.forEach(p => {
+                        if (p.value == null) return;
+                        const v = Number(p.value);
+                        const clr = p.color || '#c9d1d9';
+                        html += `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${clr}; margin-right:4px;"></span>`;
+                        html += `<span style="color:#8b949e;">${p.seriesName}</span> `;
+                        html += `<span style="color:${clr};">${v.toFixed(2)}</span><br>`;
+                    });
+                    return html;
+                }
             },
             grid: { left: '3%', right: '3%', bottom: '10%', top: '15%', containLabel: true },
             xAxis: {
@@ -507,7 +546,7 @@
 
                 const windowPreds = pa.window_predictions || {};
                 const weightsByWindow = pa.weights_by_window || {};
-                const avgSamples = pa.avg_samples || 0;
+                const avgSamples = pa.train_days || pa.avg_samples || 0;
                 let currentWindow = 'd5';
 
                 function renderWindow(winName) {
@@ -545,10 +584,10 @@
                     html += `<span style="font-size:24px; font-weight:bold; color:${aggColor};">${aggPred}</span> `;
                     html += `<span style="font-size:15px; color:var(--text-secondary);">置信度 ${aggConf}%</span>`;
                     if (avgSamples > 0) {
-                        html += `<span style="font-size:15px; color:var(--text-tertiary);"> (${avgSamples}样本)</span>`;
+                        html += `<span style="font-size:15px; color:var(--text-secondary);"> | ${avgSamples}天</span>`;
                     }
                     html += `<span class="${aggAccCls}" style="font-size:15px; margin-left:8px;">${aggAcc}</span>`;
-                    html += `<br><span style="font-size:11px; color:var(--text-secondary);">看多 ${wp.buy_pct||0}% | 看空 ${wp.sell_pct||0}% | 中性 ${wp.neutral_pct||0}%</span>`;
+                    html += `<br><span style="font-size:11px; color:var(--text-secondary);">看多 ${wp.buy_pct||0}% | 看空 ${wp.sell_pct||0}%</span>`;
                     html += '</div>';
 
                     // === 各指标预测卡片（带当前窗口胜率/权重徽章） ===

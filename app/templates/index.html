@@ -3,7 +3,32 @@
 {% block title %}多开复盘 - 首页{% endblock %}
 
 {% block content %}
-<!-- Market Overview -->
+<!-- 大盘指数 -->
+<div class="card">
+    <div class="card-title">
+        <span>📊 大盘</span>
+        <span style="font-size: 12px; color: var(--text-secondary);">点击指数查看详情</span>
+    </div>
+    <div class="analysis-grid" id="marketStats">
+        <a href="/stock/sh000001" class="analysis-item" style="text-decoration:none; cursor:pointer;">
+            <div class="analysis-indicator">上证指数</div>
+            <div class="analysis-signal" id="shIndex">--</div>
+            <div class="analysis-trend" id="shChange">--</div>
+        </a>
+        <a href="/stock/sz399001" class="analysis-item" style="text-decoration:none; cursor:pointer;">
+            <div class="analysis-indicator">深证成指</div>
+            <div class="analysis-signal" id="szIndex">--</div>
+            <div class="analysis-trend" id="szChange">--</div>
+        </a>
+        <a href="/stock/sz399006" class="analysis-item" style="text-decoration:none; cursor:pointer;">
+            <div class="analysis-indicator">创业板指</div>
+            <div class="analysis-signal" id="cyIndex">--</div>
+            <div class="analysis-trend" id="cyChange">--</div>
+        </a>
+    </div>
+</div>
+
+<!-- 热门股票 -->
 <div class="card">
     <div class="card-title">
         <span>🔥 热门股票</span>
@@ -15,45 +40,31 @@
             加载中...
         </div>
     </div>
-</div>
-
-<!-- Market Stats -->
-<div class="card">
-    <div class="card-title">
-        <span>📊 市场概况</span>
-    </div>
-    <div class="analysis-grid" id="marketStats">
-        <div class="analysis-item">
-            <div class="analysis-indicator">上证指数</div>
-            <div class="analysis-signal" id="shIndex">--</div>
-            <div class="analysis-trend" id="shChange">--</div>
-        </div>
-        <div class="analysis-item">
-            <div class="analysis-indicator">深证成指</div>
-            <div class="analysis-signal" id="szIndex">--</div>
-            <div class="analysis-trend" id="szChange">--</div>
-        </div>
-        <div class="analysis-item">
-            <div class="analysis-indicator">创业板指</div>
-            <div class="analysis-signal" id="cyIndex">--</div>
-            <div class="analysis-trend" id="cyChange">--</div>
-        </div>
+    <div id="hotExpand" style="text-align:center; padding:8px; display:none;">
+        <button onclick="toggleHotStocks()" style="background:var(--bg-tertiary); border:1px solid var(--border-color); color:var(--accent-color); padding:6px 20px; border-radius:6px; cursor:pointer; font-size:13px;">
+            <span id="hotExpandText">展开全部</span>
+        </button>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    let allHotStocks = [];
+    let hotExpanded = false;
+
     // Load hot stocks
     function loadHotStocks() {
         fetch('/api/hot')
             .then(res => res.json())
             .then(stocks => {
                 const container = document.getElementById('hotStocks');
-                container.innerHTML = '';
+                container.innerHTML = '<div class="loading"><div class="spinner"></div>加载中...</div>';
                 
-                stocks.forEach(stock => {
-                    // Fetch quote for each stock
+                allHotStocks = [];
+                let loaded = 0;
+                
+                stocks.forEach((stock, idx) => {
                     fetch(`/api/quote/${stock.code}`)
                         .then(res => res.json())
                         .then(quote => {
@@ -63,6 +74,7 @@
                             const item = document.createElement('a');
                             item.className = 'stock-item';
                             item.href = `/stock/${stock.code}`;
+                            item.setAttribute('data-idx', idx);
                             item.innerHTML = `
                                 <div class="stock-info">
                                     <div class="stock-name">${stock.name}</div>
@@ -73,13 +85,15 @@
                                     <div class="stock-change ${changeClass}">${changeSign}${quote.changePercent.toFixed(2)}%</div>
                                 </div>
                             `;
-                            container.appendChild(item);
+                            allHotStocks[idx] = item;
+                            loaded++;
+                            if (loaded === stocks.length) renderHotStocks();
                         })
                         .catch(() => {
-                            // If quote fails, show basic info
                             const item = document.createElement('a');
                             item.className = 'stock-item';
                             item.href = `/stock/${stock.code}`;
+                            item.setAttribute('data-idx', idx);
                             item.innerHTML = `
                                 <div class="stock-info">
                                     <div class="stock-name">${stock.name}</div>
@@ -90,10 +104,38 @@
                                     <div class="stock-change">--</div>
                                 </div>
                             `;
-                            container.appendChild(item);
+                            allHotStocks[idx] = item;
+                            loaded++;
+                            if (loaded === stocks.length) renderHotStocks();
                         });
                 });
             });
+    }
+
+    function renderHotStocks() {
+        const container = document.getElementById('hotStocks');
+        const expandDiv = document.getElementById('hotExpand');
+        container.innerHTML = '';
+        
+        const validStocks = allHotStocks.filter(s => s);
+        const showCount = hotExpanded ? validStocks.length : Math.min(5, validStocks.length);
+        
+        for (let i = 0; i < showCount; i++) {
+            container.appendChild(validStocks[i]);
+        }
+        
+        if (validStocks.length > 5) {
+            expandDiv.style.display = 'block';
+            document.getElementById('hotExpandText').textContent = 
+                hotExpanded ? `收起 (${validStocks.length}只)` : `展开全部 (${validStocks.length}只)`;
+        } else {
+            expandDiv.style.display = 'none';
+        }
+    }
+
+    function toggleHotStocks() {
+        hotExpanded = !hotExpanded;
+        renderHotStocks();
     }
 
     // Load market indices

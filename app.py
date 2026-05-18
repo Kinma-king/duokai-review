@@ -137,11 +137,15 @@ def stock_detail(code):
 @app.route('/api/quote/<code>')
 def get_quote(code):
     try:
-        url = f"https://qt.gtimg.cn/q={code}"
-        if code.startswith('6'):
+        # 处理带前缀的指数代码 (sh000001, sz399001)
+        if code.startswith('sh') or code.startswith('sz'):
+            url = f"https://qt.gtimg.cn/q={code}"
+        elif code.startswith('6'):
             url = f"https://qt.gtimg.cn/q=sh{code}"
         elif code.startswith('0') or code.startswith('3'):
             url = f"https://qt.gtimg.cn/q=sz{code}"
+        else:
+            url = f"https://qt.gtimg.cn/q={code}"
         
         response = requests.get(url, timeout=10)
         data = response.text
@@ -181,10 +185,18 @@ def get_kline(code):
         period = request.args.get('period', 'day')
         count = request.args.get('count', 120, type=int)
         
-        market = 'sh' if code.startswith('6') or code.startswith('689') else 'sz'
+        # 处理带前缀的代码 (sh000001, sz399001)
+        if code.startswith('sh'):
+            market, raw_code = 'sh', code[2:]
+        elif code.startswith('sz'):
+            market, raw_code = 'sz', code[2:]
+        elif code.startswith('6') or code.startswith('689'):
+            market, raw_code = 'sh', code
+        else:
+            market, raw_code = 'sz', code
         
         url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-        params = {'param': f"{market}{code},{period},,,{count},qfq"}
+        params = {'param': f"{market}{raw_code},{period},,,{count},qfq"}
         
         response = requests.get(url, params=params, timeout=15)
         data = response.json()
@@ -343,7 +355,8 @@ def list_indicator_info():
 def point_analysis(code, date):
     """返回每个指标独立的预测和准确性，以及汇总评分"""
     try:
-        klines = get_kline_data(code, 1000)
+        # 拉取足够数据（1500根，覆盖1060历史 + 未来验证）
+        klines = get_kline_data(code, 1500)
         if not klines:
             return jsonify({'error': 'No data'}), 404
         
@@ -354,6 +367,11 @@ def point_analysis(code, date):
                 break
         if idx is None:
             return jsonify({'error': f'Date {date} not found'}), 404
+        
+        # === 训练数据：仅使用选中日期之前的数据 ===
+        historical = klines[:idx+1]  # 包含选中日期
+        max_hist = 1060  # 60天MA预热 + 1000天验证
+        train_klines = historical[-max_hist:] if len(historical) > max_hist else historical
         
         current = klines[idx]
         prev = klines[idx - 1] if idx > 0 else current
@@ -559,12 +577,14 @@ def point_analysis(code, date):
         # 在整个K线序列上五窗口回测，每个窗口独立归一化权重
         # 过滤掉非预测类指标（prediction == '--' 如 ATR）
         scoring_results = [r for r in indicator_results if r.get('prediction') not in ('--', None, '')]
-        weights_by_window = compute_indicator_weights(klines)
+        weights_by_window = compute_indicator_weights(train_klines)
         
         # 为每个窗口计算加权预测
         window_predictions = {}
         window_weights_display = {}
-        avg_samples = 0
+        # 实际训练天数
+        actual_train_days = len(train_klines)
+        sample_count = 0  # 有效验证样本数
         for win_name in ['d1', 'd3', 'd5', 'd10', 'd30']:
             win_data = weights_by_window.get(win_name, {})
             w_dict = win_data.get('weights', {}) if win_data else {}
@@ -595,9 +615,9 @@ def point_analysis(code, date):
                     'samples': v['total'],
                     'correct': v['correct'],
                 }
-            # 记录平均样本数
-            if indicators:
-                avg_samples = max(v.get('total', 0) for v in indicators.values())
+            # 记录有效验证样本数（d5 窗口）
+            if indicators and win_name == 'd5':
+                sample_count = max(v.get('total', 0) for v in indicators.values())
         
         # 默认展示 d5 窗口
         default_win = window_predictions.get('d5', window_predictions.get('d3', {}))
@@ -633,7 +653,8 @@ def point_analysis(code, date):
             },
             'window_predictions': window_predictions,
             'weights_by_window': window_weights_display,
-            'avg_samples': avg_samples,
+            'train_days': actual_train_days,
+            'sample_count': sample_count,
             'comparison': comparison,
         })
     except Exception as e:
@@ -1013,10 +1034,18 @@ def get_analysis(code):
         return jsonify({'error': str(e)}), 500
 
 def get_kline_data(code, count=60):
-    market = 'sh' if code.startswith('6') or code.startswith('689') else 'sz'
+    # 处理带前缀的代码
+    if code.startswith('sh'):
+        market, raw_code = 'sh', code[2:]
+    elif code.startswith('sz'):
+        market, raw_code = 'sz', code[2:]
+    elif code.startswith('6') or code.startswith('689'):
+        market, raw_code = 'sh', code
+    else:
+        market, raw_code = 'sz', code
     
     url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-    params = {'param': f"{market}{code},day,,,{count},qfq"}
+    params = {'param': f"{market}{raw_code},day,,,{count},qfq"}
     
     response = requests.get(url, params=params, timeout=15)
     data = response.json()
