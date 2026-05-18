@@ -112,7 +112,9 @@
     <div class="card-title">
         <span>技术指标</span>
         <div class="period-selector" style="flex-wrap: wrap;">
-            <button class="period-btn active" data-indicator="macd" onclick="switchIndicator('macd')">MACD<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('MACD')">ⓘ</span></button>
+            <button class="period-btn active" data-indicator="vol" onclick="switchIndicator('vol')">成交量<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('VOL_MA')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="ma" onclick="switchIndicator('ma')">MA<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('MA')">ⓘ</span></button>
+            <button class="period-btn" data-indicator="macd" onclick="switchIndicator('macd')">MACD<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('MACD')">ⓘ</span></button>
             <button class="period-btn" data-indicator="kdj" onclick="switchIndicator('kdj')">KDJ<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('KDJ')">ⓘ</span></button>
             <button class="period-btn" data-indicator="rsi" onclick="switchIndicator('rsi')">RSI<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('RSI')">ⓘ</span></button>
             <button class="period-btn" data-indicator="boll" onclick="switchIndicator('boll')">BOLL<span class="info-badge" onclick="event.stopPropagation();showIndicatorInfo('BOLL')">ⓘ</span></button>
@@ -168,7 +170,7 @@
     const code = '{{ code }}';
     let klineChart, indicatorChart;
     let currentPeriod = 'day';
-    let currentIndicator = 'macd';
+    let currentIndicator = 'vol';
     let klineData = [];
     let indicatorInfoCache = {};
 
@@ -289,6 +291,29 @@
         let yAxisName = '';
 
         switch(indicator) {
+            case 'vol':
+                series = [
+                    { name: '成交量', type: 'bar', data: data.map(d => d.volume),
+                        itemStyle: { color: function(p) { 
+                            const i = p.dataIndex;
+                            if (i > 0 && data[i] && data[i-1]) return data[i].close >= data[i-1].close ? '#ff4d4f' : '#52c41a';
+                            return '#ffd700';
+                        } }
+                    },
+                    { name: 'VOL_MA5', type: 'line', data: data.map(d => d.VOL_MA5), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                    { name: 'VOL_MA10', type: 'line', data: data.map(d => d.VOL_MA10), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
+                ];
+                yAxisName = '成交量';
+                break;
+            case 'ma':
+                series = [
+                    { name: 'MA5', type: 'line', data: data.map(d => d.MA5), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
+                    { name: 'MA10', type: 'line', data: data.map(d => d.MA10), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
+                    { name: 'MA20', type: 'line', data: data.map(d => d.MA20), lineStyle: { color: '#ff69b4', width: 1 }, symbol: 'none' },
+                    { name: 'MA60', type: 'line', data: data.map(d => d.MA60), lineStyle: { color: '#7fff00', width: 1 }, symbol: 'none' },
+                ];
+                yAxisName = 'MA';
+                break;
             case 'macd':
                 series = [
                     { name: 'DIF', type: 'line', data: data.map(d => d.MACD), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
