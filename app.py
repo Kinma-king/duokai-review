@@ -359,14 +359,14 @@ def point_analysis(code, date):
         prev = klines[idx - 1] if idx > 0 else current
         
         # 后续数据用于多窗口验证
-        future_data = klines[idx+1:idx+11]
+        future_data = klines[idx+1:idx+31]
         start_price = current['close']
         
         # 多窗口实际走势
         actual_windows = {}
         comparison = {'start_price': start_price, 'windows': {}, 'subsequent': []}
         
-        for days, label in [(1, 'd1'), (3, 'd3'), (5, 'd5')]:
+        for days, label in [(1, 'd1'), (3, 'd3'), (5, 'd5'), (10, 'd10'), (30, 'd30')]:
             if idx + days < len(klines):
                 ret = round((klines[idx+days]['close'] - start_price) / start_price * 100, 2)
                 if ret > 1.0:
@@ -377,11 +377,11 @@ def point_analysis(code, date):
                     trend = '震荡'
                 actual_windows[label] = {'return': ret, 'trend': trend}
         
-        # 默认用 d3 验证
-        actual_trend = actual_windows.get('d3', {}).get('trend') if actual_windows else None
+        # 默认用 d5 验证
+        actual_trend = actual_windows.get('d5', {}).get('trend') if actual_windows else None
         
-        # 后续走势数据（用于前端展示）
-        for f in future_data[:5]:
+        # 后续走势数据（用于前端展示，增加到10根）
+        for f in future_data[:10]:
             comparison['subsequent'].append({
                 'date': f['date'],
                 'close': f['close'],
@@ -556,38 +556,42 @@ def point_analysis(code, date):
             })
         
         # ---- 汇总评分 (动态权重) ----
-        # 在整个K线序列上回测，得到每个指标的准确率和权重
-        weights = compute_indicator_weights(klines)
+        # 在整个K线序列上五窗口回测，每个窗口独立归一化权重
+        weights_by_window = compute_indicator_weights(klines)
         
-        # 提取各指标准确率（用于前端展示）
-        indicator_weights = {}
-        for ind_id, win_stats in weights.items():
-            if 'best_window' in win_stats:
-                indicator_weights[ind_id] = {
-                    'accuracy': win_stats['best_accuracy'],
-                    'weight': round(win_stats['weight'] * 100),
-                    'samples': win_stats.get(win_stats['best_window'], {}).get('total', 0),
-                    'correct': win_stats.get(win_stats['best_window'], {}).get('correct', 0),
-                    'best_window': win_stats['best_window'],
-                    'windows': {
-                        w: {
-                            'accuracy': win_stats[w].get('accuracy', 0),
-                            'samples': win_stats[w].get('total', 0),
-                            'correct': win_stats[w].get('correct', 0),
-                        }
-                        for w in ['d1', 'd3', 'd5'] if 'accuracy' in win_stats.get(w, {})
-                    }
+        # 为每个窗口计算加权预测
+        window_predictions = {}
+        window_weights_display = {}
+        for win_name in ['d1', 'd3', 'd5', 'd10', 'd30']:
+            win_data = weights_by_window.get(win_name, {})
+            w_dict = win_data.get('weights', {}) if win_data else {}
+            wagg = weighted_aggregate(indicator_results, w_dict)
+            window_predictions[win_name] = {
+                'prediction': wagg['prediction'],
+                'confidence': wagg['confidence'],
+                'buy_pct': wagg['buy_pct'],
+                'sell_pct': wagg['sell_pct'],
+            }
+            # 为每个窗口包装权重视图（用于前端表格）
+            indicators = win_data.get('indicators', {}) if win_data else {}
+            window_weights_display[win_name] = {}
+            for ind_id, v in indicators.items():
+                window_weights_display[win_name][ind_id] = {
+                    'accuracy': v['accuracy'],
+                    'weight': round(v['weight'] * 100),  # 转百分比
+                    'samples': v['total'],
+                    'correct': v['correct'],
                 }
+        
+        # 默认展示 d5 窗口
+        default_win = window_predictions.get('d5', window_predictions.get('d3', {}))
+        wagg = default_win
         
         # 等权重汇总（简单多数）
         buy_count = sum(1 for r in indicator_results if r['prediction'] == '看涨')
         sell_count = sum(1 for r in indicator_results if r['prediction'] == '看跌')
         
-        # 动态权重汇总
-        pa = {'indicator_results': indicator_results}
-        wagg = weighted_aggregate(pa, weights)
-        
-        agg_acc = judge_accuracy(wagg['prediction'], actual_trend) if wagg['prediction'] != '--' else '--'
+        agg_acc = judge_accuracy(wagg.get('prediction', '--'), actual_trend) if wagg.get('prediction') != '--' else '--'
         
         return jsonify({
             'code': code,
@@ -598,20 +602,21 @@ def point_analysis(code, date):
                 'buy_count': buy_count,
                 'sell_count': sell_count,
                 'neutral_count': len(indicator_results) - buy_count - sell_count,
-                'prediction': wagg['prediction'],
-                'confidence': wagg['confidence'],
+                'prediction': wagg.get('prediction', '震荡'),
+                'confidence': wagg.get('confidence', 0),
                 'accuracy': agg_acc,
             },
             'weighted_aggregate': {
-                'prediction': wagg['prediction'],
-                'confidence': wagg['confidence'],
-                'buy_weight': wagg['buy_weight'],
-                'sell_weight': wagg['sell_weight'],
+                'prediction': wagg.get('prediction', '--'),
+                'confidence': wagg.get('confidence', 0),
+                'buy_weight': wagg.get('buy_weight', 0),
+                'sell_weight': wagg.get('sell_weight', 0),
                 'buy_pct': wagg.get('buy_pct', 0),
                 'sell_pct': wagg.get('sell_pct', 0),
                 'accuracy': agg_acc,
             },
-            'indicator_weights': indicator_weights,
+            'window_predictions': window_predictions,
+            'weights_by_window': window_weights_display,
             'comparison': comparison,
         })
     except Exception as e:
@@ -684,11 +689,11 @@ def get_indicator_predictions(current, prev):
 
 
 def compute_indicator_weights(klines, min_samples=30):
-    """d1/d3/d5 三窗口回测，每个指标取最佳窗口的胜率作为权重。
-    返回 {indicator_id: {best_window, accuracy, weight, windows: {d1:{}, d3:{}, d5:{}}}}"""
+    """五窗口回测(d1/d3/d5/d10/d30)，每个窗口独立归一化权重。
+    返回 {window_name: {indicators: {id: {accuracy, weight, correct, total}, ...}, weights: {id: weight, ...}}}"""
     from collections import defaultdict
     
-    windows = {'d1': 1, 'd3': 3, 'd5': 5}
+    windows = {'d1': 1, 'd3': 3, 'd5': 5, 'd10': 10, 'd30': 30}
     
     # stats[indicator][window] = {'correct': N, 'total': N}
     stats = defaultdict(lambda: defaultdict(lambda: {'correct': 0, 'total': 0}))
@@ -723,57 +728,54 @@ def compute_indicator_weights(klines, min_samples=30):
                 if mapping.get(pred) == actual:
                     stats[ind_id][win_name]['correct'] += 1
     
-    # 计算每个窗口的准确率
-    for ind_id, win_stats in stats.items():
-        for win_name, s in win_stats.items():
-            if s['total'] >= min_samples:
-                s['accuracy'] = round(s['correct'] / s['total'] * 100, 1)
-    
-    # 每个指标取最佳窗口
-    for ind_id, win_stats in stats.items():
-        best_acc = 0
-        best_win = None
-        for win_name in windows:
+    # 构建每个窗口独立的权重向量
+    result = {}
+    for win_name in windows:
+        indicators = {}
+        for ind_id, win_stats in stats.items():
             s = win_stats[win_name]
-            if 'accuracy' in s and s['accuracy'] > best_acc:
-                best_acc = s['accuracy']
-                best_win = win_name
+            if s['total'] >= min_samples:
+                acc = round(s['correct'] / s['total'] * 100, 1)
+                indicators[ind_id] = {
+                    'accuracy': acc,
+                    'correct': s['correct'],
+                    'total': s['total'],
+                }
         
-        if best_win:
-            win_stats['best_window'] = best_win
-            win_stats['best_accuracy'] = best_acc
+        if not indicators:
+            result[win_name] = {'indicators': {}, 'weights': {}}
+            continue
+        
+        # 一次归一化
+        total_acc = sum(v['accuracy'] for v in indicators.values())
+        for ind_id, v in indicators.items():
+            raw = v['accuracy'] / total_acc if total_acc > 0 else 1.0 / len(indicators)
+            floor = 0.10 / len(indicators)
+            v['weight'] = max(raw, floor)
+        
+        # 二次归一化保证和严格等于 1
+        total_w = sum(v['weight'] for v in indicators.values())
+        if total_w > 0:
+            for v in indicators.values():
+                v['weight'] = round(v['weight'] / total_w, 4)
+        
+        result[win_name] = {
+            'indicators': indicators,
+            'weights': {ind_id: v['weight'] for ind_id, v in indicators.items()},
+        }
     
-    # 归一化：所有权重之和 = 1.0
-    total_best = sum(s.get('best_accuracy', 0) for s in stats.values())
-    for ind_id, win_stats in stats.items():
-        if 'best_accuracy' in win_stats and total_best > 0:
-            # raw_weight = best_accuracy / total_best，保底 10% 后再归一化
-            raw = win_stats['best_accuracy'] / total_best
-            floor = 0.10 / len(stats) if len(stats) > 0 else 0.01
-            win_stats['weight'] = round(max(raw, floor), 4)
-    
-    # 二次归一化保证和严格等于 1
-    total_w = sum(s.get('weight', 0) for s in stats.values())
-    if total_w > 0:
-        for s in stats.values():
-            if 'weight' in s:
-                s['weight'] = round(s['weight'] / total_w, 4)
-    
-    return stats
+    return result
 
 
-def weighted_aggregate(pa_result, weights):
-    """用动态权重（各指标取最佳窗口）重新计算汇总评分"""
+def weighted_aggregate(indicator_results, weight_dict):
+    """用权重字典 {ind_id: weight} 计算加权汇总评分。weight_dict 中的权重已归一化。"""
     buy_weight = 0.0
     sell_weight = 0.0
     total_weight = 0.0
     
-    for r in pa_result.get('indicator_results', []):
+    for r in indicator_results:
         ind_id = r['id']
-        w = 1.0  # 等权重兜底
-        # 取该指标的最佳窗口权重
-        if ind_id in weights and 'weight' in weights[ind_id]:
-            w = weights[ind_id]['weight']
+        w = weight_dict.get(ind_id, 1.0)  # 等权重兜底
         
         if r['prediction'] == '看涨':
             buy_weight += w
