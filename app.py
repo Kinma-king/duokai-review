@@ -338,127 +338,272 @@ def get_indicator_info(name):
 def list_indicator_info():
     return jsonify([{'id': k, 'name': v['name'], 'category': v['category']} for k, v in INDICATOR_INFO.items()])
 
-# ========== 点位分析（点击K线当天） ==========
+# ========== 点位分析（点击K线当天）==========
 @app.route('/api/point-analysis/<code>/<date>')
 def point_analysis(code, date):
-    """点击某天K线，返回当天的指标值、分析结论、和后续真实趋势对比"""
+    """返回每个指标独立的预测和准确性，以及汇总评分"""
     try:
         klines = get_kline_data(code, 200)
         if not klines:
             return jsonify({'error': 'No data'}), 404
         
-        # 找到点击日期在数据中的位置
         idx = None
         for i, k in enumerate(klines):
             if k['date'] == date:
                 idx = i
                 break
-        
         if idx is None:
-            return jsonify({'error': f'Date {date} not found in data'}), 404
+            return jsonify({'error': f'Date {date} not found'}), 404
         
         current = klines[idx]
         prev = klines[idx - 1] if idx > 0 else current
         
-        # --- 提取当天各指标数值 ---
-        indicators = {}
-        for field in ['open', 'close', 'high', 'low', 'volume',
-                       'MA5', 'MA10', 'MA20', 'MA30', 'MA60',
-                       'MACD', 'MACD_SIGNAL', 'MACD_HIST',
-                       'K', 'D', 'J', 'RSI',
-                       'BOLL_MID', 'BOLL_UP', 'BOLL_DOWN', 'BOLL_STD',
-                       'OBV', 'WR', 'CCI', 'ATR',
-                       'BIAS6', 'BIAS12', 'BIAS24',
-                       'PSY', 'VR', 'VOL_MA5', 'VOL_MA10']:
-            v = current.get(field)
-            if v is not None:
-                indicators[field] = round(float(v), 4)
-            else:
-                indicators[field] = None
-        
-        # --- 当天信号分析 ---
-        signals = analyze_signals_at_point(current, prev)
-        
-        # --- 预测趋势 ---
-        buy_count = sum(1 for s in signals if s['trend'] in ['买入', '上涨', '反弹', '强势'])
-        sell_count = sum(1 for s in signals if s['trend'] in ['卖出', '下跌', '回调', '弱势'])
-        
-        if buy_count > sell_count:
-            prediction = '看涨'
-            confidence = min(100, 50 + (buy_count - sell_count) * 15)
-        elif sell_count > buy_count:
-            prediction = '看跌'
-            confidence = min(100, 50 + (sell_count - buy_count) * 15)
-        else:
-            prediction = '震荡'
-            confidence = 50
-        
-        # --- 与后续真实趋势对比 ---
-        future_data = klines[idx+1:idx+6]  # 后面1~5天
-        accuracy = None
+        # 后续数据用于验证准确性
+        future_data = klines[idx+1:idx+6]
+        start_price = current['close']
         actual_trend = None
-        comparison = None
-        
+        d1_ret = None
         if len(future_data) > 0:
-            future_close = [f['close'] for f in future_data]
-            future_dates = [f['date'] for f in future_data]
-            start_price = current['close']
-            
-            # 后续1/3/5日收益率
-            rets = {}
-            for days in [1, 3, 5]:
-                if len(future_close) >= days:
-                    ret = (future_close[days-1] - start_price) / start_price * 100
-                    rets[f'd{datetime}'] = round(ret, 2)
-            
-            # 实际趋势方向
-            if len(future_close) >= 1:
-                d1_ret = (future_close[0] - start_price) / start_price * 100
-                if d1_ret > 0.5:
-                    actual_trend = '上涨'
-                elif d1_ret < -0.5:
-                    actual_trend = '下跌'
-                else:
-                    actual_trend = '震荡'
-            
-            # 判断准确性
-            if actual_trend and prediction:
-                if prediction == '看涨' and actual_trend == '上涨':
-                    accuracy = '正确 ✅'
-                elif prediction == '看跌' and actual_trend == '下跌':
-                    accuracy = '正确 ✅'
-                elif prediction == '震荡' and actual_trend == '震荡':
-                    accuracy = '正确 ✅'
-                elif prediction == '震荡':
-                    accuracy = '中性'
-                else:
-                    accuracy = '错误 ❌'
-            
+            d1_ret = round((future_data[0]['close'] - start_price) / start_price * 100, 2)
+            if d1_ret > 0.5:
+                actual_trend = '上涨'
+            elif d1_ret < -0.5:
+                actual_trend = '下跌'
+            else:
+                actual_trend = '震荡'
+        
+        # 后续走势数据
+        comparison = None
+        if len(future_data) > 0:
             comparison = {
                 'start_price': start_price,
-                'subsequent': [
-                    {'date': future_dates[i], 'close': future_close[i],
-                     'change_pct': round((future_close[i] - start_price) / start_price * 100, 2)}
-                    for i in range(min(len(future_close), 5))
-                ],
+                'subsequent': [{
+                    'date': f['date'],
+                    'close': f['close'],
+                    'change_pct': round((f['close'] - start_price) / start_price * 100, 2)
+                } for f in future_data[:5]],
                 'actual_trend': actual_trend,
-                'd1_return_pct': round((future_close[0] - start_price) / start_price * 100, 2) if len(future_close) >= 1 else None,
-                'd3_return_pct': round((future_close[2] - start_price) / start_price * 100, 2) if len(future_close) >= 3 else None,
-                'd5_return_pct': round((future_close[4] - start_price) / start_price * 100, 2) if len(future_close) >= 5 else None,
+                'd1_return_pct': d1_ret,
             }
+        
+        # ---- 每个指标独立分析 ----
+        indicator_results = []
+        
+        # MA
+        if current.get('MA20') is not None:
+            v = round(current['MA20'], 2)
+            if current['close'] > current['MA20']:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'MA', 'name': '移动平均线', 'value': f'{v}', 'unit': '¥',
+                'signal': '多头' if current['close'] > v else '空头',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # MACD
+        if current.get('MACD') is not None and current.get('MACD_SIGNAL') is not None:
+            v = round(current['MACD'], 4)
+            if current['MACD'] > current['MACD_SIGNAL']:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'MACD', 'name': 'MACD', 'value': f'{v} (DIF)', 'unit': '',
+                'signal': '金叉' if current['MACD'] > current['MACD_SIGNAL'] and prev.get('MACD', 0) <= prev.get('MACD_SIGNAL', 0) else '',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # KDJ
+        if current.get('K') is not None and current.get('D') is not None:
+            v = round(current['K'], 2)
+            if current['K'] > current['D']:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'KDJ', 'name': 'KDJ', 'value': f'K={v} D={round(current["D"],2)}', 'unit': '',
+                'signal': '金叉' if current['K'] > current['D'] else '死叉',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # RSI
+        if current.get('RSI') is not None:
+            v = round(current['RSI'], 2)
+            if v > 50:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'RSI', 'name': 'RSI', 'value': f'{v}', 'unit': '',
+                'signal': '超买' if v > 70 else '超卖' if v < 30 else '中性',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # BOLL
+        if current.get('BOLL_MID') is not None:
+            v = round(current['BOLL_MID'], 2)
+            if current['close'] > v:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'BOLL', 'name': '布林带', 'value': f'{v} (中轨)', 'unit': '¥',
+                'signal': '中轨上方' if current['close'] > v else '中轨下方',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # OBV
+        if current.get('OBV') is not None and prev.get('OBV') is not None:
+            v = int(current['OBV'])
+            if current['OBV'] > prev['OBV']:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'OBV', 'name': '能量潮', 'value': f'{v}', 'unit': '',
+                'signal': '资金流入' if current['OBV'] > prev['OBV'] else '资金流出',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # WR
+        if current.get('WR') is not None:
+            v = round(current['WR'], 2)
+            if v > -50:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'WR', 'name': '威廉指标', 'value': f'{v}', 'unit': '',
+                'signal': '超买' if v > -20 else '超卖' if v < -80 else '中性',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # CCI
+        if current.get('CCI') is not None:
+            v = round(current['CCI'], 2)
+            if v > 0:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'CCI', 'name': '商品通道', 'value': f'{v}', 'unit': '',
+                'signal': '强多' if v > 100 else '强空' if v < -100 else '中性',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # BIAS
+        if current.get('BIAS6') is not None:
+            v = round(current['BIAS6'], 2)
+            if v > 0:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'BIAS', 'name': '乖离率', 'value': f'{v}%', 'unit': '',
+                'signal': '超买' if v > 5 else '超卖' if v < -5 else '正常',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # PSY
+        if current.get('PSY') is not None:
+            v = round(current['PSY'], 2)
+            if v > 50:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'PSY', 'name': '心理线', 'value': f'{v}', 'unit': '',
+                'signal': '过热' if v > 75 else '悲观' if v < 25 else '中性',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # VR
+        if current.get('VR') is not None:
+            v = round(current['VR'], 2)
+            if v > 150:
+                pred = '看涨'
+            else:
+                pred = '看跌'
+            acc = judge_accuracy(pred, actual_trend)
+            indicator_results.append({
+                'id': 'VR', 'name': '量比', 'value': f'{v}', 'unit': '',
+                'signal': '活跃' if v > 450 else '低迷' if v < 70 else '正常',
+                'prediction': pred, 'actual': actual_trend, 'accuracy': acc
+            })
+        
+        # ATR
+        if current.get('ATR') is not None:
+            v = round(current['ATR'], 2)
+            indicator_results.append({
+                'id': 'ATR', 'name': '平均波幅', 'value': f'{v}', 'unit': '',
+                'signal': '高波动' if v > current['close'] * 0.03 else '正常',
+                'prediction': '--', 'actual': actual_trend, 'accuracy': '参考'
+            })
+        
+        # ---- 汇总评分 ----
+        buy_count = sum(1 for r in indicator_results if r['prediction'] == '看涨')
+        sell_count = sum(1 for r in indicator_results if r['prediction'] == '看跌')
+        total = buy_count + sell_count
+        
+        if total > 0:
+            if buy_count > sell_count:
+                agg_pred = '看涨'
+                agg_conf = min(100, 50 + (buy_count - sell_count) * (50 // max(total, 1)))
+            elif sell_count > buy_count:
+                agg_pred = '看跌'
+                agg_conf = min(100, 50 + (sell_count - buy_count) * (50 // max(total, 1)))
+            else:
+                agg_pred = '震荡'
+                agg_conf = 50
+        else:
+            agg_pred = '--'
+            agg_conf = 0
+        
+        agg_acc = judge_accuracy(agg_pred, actual_trend) if agg_pred != '--' else '--'
         
         return jsonify({
             'code': code,
             'date': date,
-            'indicators': indicators,
-            'signals': signals,
-            'prediction': prediction,
-            'confidence': confidence,
-            'accuracy': accuracy,
+            'price': start_price,
+            'indicator_results': indicator_results,
+            'aggregate': {
+                'buy_count': buy_count,
+                'sell_count': sell_count,
+                'neutral_count': len(indicator_results) - buy_count - sell_count,
+                'prediction': agg_pred,
+                'confidence': agg_conf,
+                'accuracy': agg_acc,
+            },
             'comparison': comparison,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def judge_accuracy(prediction, actual):
+    """判断单个预测的准确性"""
+    if not prediction or not actual or prediction == '--':
+        return '--'
+    mapping = {'看涨': '上涨', '看跌': '下跌', '震荡': '震荡'}
+    expected = mapping.get(prediction, prediction)
+    if expected == actual:
+        return '正确 ✅'
+    elif prediction == '震荡':
+        return '中性'
+    else:
+        return '错误 ❌'
 
 
 def analyze_signals_at_point(current, prev):

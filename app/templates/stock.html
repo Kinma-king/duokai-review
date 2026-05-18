@@ -393,7 +393,7 @@
         indicatorChart.setOption(option, true);
     }
 
-    // Show candle info — now with point analysis
+    // Show candle info — per-indicator analysis
     function showCandleInfo(index) {
         const data = klineData[index];
         if (!data) return;
@@ -414,16 +414,10 @@
             <div class="analysis-item"><div class="analysis-indicator">最低价</div><div class="analysis-signal">${data.low.toFixed(2)}</div></div>
             <div class="analysis-item"><div class="analysis-indicator">涨跌幅</div><div class="analysis-signal ${changeClass}">${sign}${data.changePercent.toFixed(2)}%</div></div>
             <div class="analysis-item"><div class="analysis-indicator">成交量</div><div class="analysis-signal">${formatVolume(data.volume)}</div></div>
-            <div class="analysis-item"><div class="analysis-indicator">MA5</div><div class="analysis-signal">${data.MA5 != null ? data.MA5.toFixed(2) : '--'}</div></div>
-            <div class="analysis-item"><div class="analysis-indicator">MA20</div><div class="analysis-signal">${data.MA20 != null ? data.MA20.toFixed(2) : '--'}</div></div>
-            <div class="analysis-item"><div class="analysis-indicator">RSI</div><div class="analysis-signal">${data.RSI != null ? data.RSI.toFixed(2) : '--'}</div></div>
-            <div class="analysis-item"><div class="analysis-indicator">MACD</div><div class="analysis-signal">${data.MACD != null ? data.MACD.toFixed(4) : '--'}</div></div>
-            <div class="analysis-item"><div class="analysis-indicator">K</div><div class="analysis-signal">${data.K != null ? data.K.toFixed(2) : '--'}</div></div>
-            <div class="analysis-item"><div class="analysis-indicator">CCI</div><div class="analysis-signal">${data.CCI != null ? data.CCI.toFixed(2) : '--'}</div></div>
         `;
 
         // Fetch point analysis from API
-        document.getElementById('pointPrediction').innerHTML = '<div class="loading"><div class="spinner"></div>点位分析中...</div>';
+        document.getElementById('pointPrediction').innerHTML = '<div class="loading"><div class="spinner"></div>加载各指标分析...</div>';
         document.getElementById('accuracyComparison').innerHTML = '';
 
         fetch(`/api/point-analysis/${code}/${date}`)
@@ -434,40 +428,65 @@
                     return;
                 }
 
-                let predHtml = `<strong>📈 综合分析</strong><br>`;
-                predHtml += `当日预测: <span style="color: ${pa.prediction === '看涨' ? '#52c41a' : pa.prediction === '看跌' ? '#ff4d4f' : '#faad14'}; font-size: 18px; font-weight: bold;">${pa.prediction}</span> `;
-                predHtml += `(置信度: ${pa.confidence})<br>`;
+                // ---- 汇总评分 ----
+                const agg = pa.aggregate;
+                const aggColor = agg.prediction === '看涨' ? '#52c41a' : agg.prediction === '看跌' ? '#ff4d4f' : '#faad14';
+                const aggAccClass = agg.accuracy && agg.accuracy.includes('正确') ? 'accuracy-correct' : agg.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
+                
+                let aggHtml = '<div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 12px;">';
+                aggHtml += '<div style="display: flex; justify-content: space-between; align-items: center;">';
+                aggHtml += '<div>';
+                aggHtml += `<span style="font-size: 14px; color: var(--text-secondary);">📊 综合评分</span><br>`;
+                aggHtml += `<span style="font-size: 24px; font-weight: bold; color: ${aggColor};">${agg.prediction}</span> `;
+                aggHtml += `<span style="color: var(--text-secondary);">置信度 ${agg.confidence}</span>`;
+                aggHtml += '</div>';
+                aggHtml += '<div style="text-align: right;">';
+                aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">看多 ${agg.buy_count} | 看空 ${agg.sell_count}</span><br>`;
+                aggHtml += `<span class="${aggAccClass}" style="font-size: 18px; font-weight: bold;">${agg.accuracy || '--'}</span>`;
+                aggHtml += '</div></div></div>';
+                
+                // ---- 各指标独立卡片 ----
+                aggHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">';
+                pa.indicator_results.forEach(r => {
+                    let predColor = r.prediction === '看涨' ? '#52c41a' : r.prediction === '看跌' ? '#ff4d4f' : '#8b949e';
+                    let accClass = r.accuracy && r.accuracy.includes('正确') ? 'accuracy-correct' : 
+                                   r.accuracy.includes('错误') ? 'accuracy-wrong' :
+                                   r.accuracy === '参考' ? '' : 'accuracy-neutral';
+                    let bgStyle = r.accuracy && r.accuracy.includes('正确') ? 'border-left: 3px solid #52c41a;' :
+                                  r.accuracy.includes('错误') ? 'border-left: 3px solid #ff4d4f;' : '';
+                    
+                    aggHtml += `<div style="background: var(--bg-tertiary); border-radius: 8px; padding: 10px; ${bgStyle}">`;
+                    aggHtml += `<div style="display: flex; justify-content: space-between; align-items: start;">`;
+                    aggHtml += `<div>`;
+                    aggHtml += `<span style="font-weight: bold; color: var(--accent-color);">${r.id}</span> `;
+                    aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">${r.name}</span><br>`;
+                    aggHtml += `<span style="font-size: 14px;">${r.value} ${r.unit}</span><br>`;
+                    aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">${r.signal}</span>`;
+                    aggHtml += '</div>';
+                    aggHtml += '<div style="text-align: right;">';
+                    aggHtml += `<span style="color: ${predColor}; font-weight: bold;">${r.prediction}</span><br>`;
+                    aggHtml += `<span class="${accClass}" style="font-size: 13px;">${r.accuracy || ''}</span>`;
+                    aggHtml += '</div></div></div>';
+                });
+                aggHtml += '</div>';
+                
+                document.getElementById('pointPrediction').innerHTML = aggHtml;
 
-                // Accuracy
-                if (pa.accuracy) {
-                    const accClass = pa.accuracy.includes('正确') ? 'accuracy-correct' : pa.accuracy === '中性' ? 'accuracy-neutral' : 'accuracy-wrong';
-                    predHtml += `准确性验证: <span class="${accClass}" style="font-weight: bold;">${pa.accuracy}</span>`;
-                }
-
-                // Signals
-                if (pa.signals && pa.signals.length > 0) {
-                    predHtml += `<br><br><strong>信号:</strong><br>`;
-                    pa.signals.forEach(s => {
-                        predHtml += `• ${s.indicator}: ${s.signal} (${s.trend}, ${s.strength})<br>`;
-                    });
-                }
-                document.getElementById('pointPrediction').innerHTML = predHtml;
-
-                // Accuracy comparison table
+                // ---- 后续走势对比 ----
                 if (pa.comparison) {
-                    let compHtml = '<strong>📉 后续真实走势 vs 预测</strong>';
+                    let compHtml = '<strong style="color: var(--text-secondary);">📉 后续实际走势</strong>';
                     compHtml += '<table class="comparison-table"><thead><tr><th>日期</th><th>收盘价</th><th>涨跌幅</th></tr></thead><tbody>';
                     pa.comparison.subsequent.forEach(s => {
                         const cls = s.change_pct >= 0 ? 'up' : 'down';
                         const sn = s.change_pct >= 0 ? '+' : '';
-                        compHtml += `<tr><td>${s.date}</td><td>${s.close.toFixed(2)}</td><td class="${cls}">${sn}${s.change_pct.toFixed(2)}%</td></tr>`;
+                        compHtml += `<tr><td>${s.date}</td><td>¥${s.close.toFixed(2)}</td><td class="${cls}">${sn}${s.change_pct.toFixed(2)}%</td></tr>`;
                     });
                     compHtml += '</tbody></table>';
                     document.getElementById('accuracyComparison').innerHTML = compHtml;
                 }
             })
             .catch(err => {
-                document.getElementById('pointPrediction').innerHTML = `<span style="color: var(--text-secondary);">分析失败: ${err}</span>`;
+                document.getElementById('pointPrediction').innerHTML = `<span style="color: var(--text-secondary);">加载失败: ${err}</span>`;
             });
 
         document.getElementById('candleInfo').scrollIntoView({ behavior: 'smooth' });
