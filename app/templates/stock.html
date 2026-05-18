@@ -183,6 +183,12 @@
             }
         });
 
+        indicatorChart.on('click', function(params) {
+            if (params.componentType === 'series') {
+                showCandleInfo(params.dataIndex);
+            }
+        });
+
         window.addEventListener('resize', () => {
             klineChart.resize();
             indicatorChart.resize();
@@ -265,7 +271,7 @@
             series: [
                 {
                     name: 'K线', type: 'candlestick', data: values,
-                    itemStyle: { color: '#52c41a', color0: '#ff4d4f', borderColor: '#52c41a', borderColor0: '#ff4d4f' }
+                    itemStyle: { color: '#ff4d4f', color0: '#52c41a', borderColor: '#ff4d4f', borderColor0: '#52c41a' }
                 },
                 { name: 'MA5', type: 'line', data: ma5, smooth: true, lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
                 { name: 'MA10', type: 'line', data: ma10, smooth: true, lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
@@ -288,7 +294,7 @@
                     { name: 'DIF', type: 'line', data: data.map(d => d.MACD), lineStyle: { color: '#ffd700', width: 1 }, symbol: 'none' },
                     { name: 'DEA', type: 'line', data: data.map(d => d.MACD_SIGNAL), lineStyle: { color: '#00ffff', width: 1 }, symbol: 'none' },
                     { name: 'MACD', type: 'bar', data: data.map(d => d.MACD_HIST),
-                        itemStyle: { color: function(p) { return p.value >= 0 ? '#52c41a' : '#ff4d4f'; } }
+                        itemStyle: { color: function(p) { return p.value >= 0 ? '#ff4d4f' : '#52c41a'; } }
                     }
                 ];
                 yAxisName = 'MACD';
