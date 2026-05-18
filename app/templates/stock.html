@@ -446,32 +446,45 @@
                     return;
                 }
 
-                // ---- 汇总评分 ----
+                // ---- 汇总评分 (动态权重) ----
                 const agg = pa.aggregate;
+                const wagg = pa.weighted_aggregate || {};
                 const aggColor = agg.prediction === '看涨' ? '#ff4d4f' : agg.prediction === '看跌' ? '#52c41a' : '#faad14';
-                const aggAccClass = agg.accuracy && agg.accuracy.includes('正确') ? 'accuracy-correct' : agg.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
+                const aggAccClass = agg.accuracy && agg.accuracy.includes('正确') ? 'accuracy-correct' : 
+                                    agg.accuracy && agg.accuracy.includes('错误') ? 'accuracy-wrong' : 'accuracy-neutral';
                 
                 let aggHtml = '<div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 12px;">';
                 aggHtml += '<div style="display: flex; justify-content: space-between; align-items: center;">';
                 aggHtml += '<div>';
-                aggHtml += `<span style="font-size: 14px; color: var(--text-secondary);">📊 综合评分</span><br>`;
+                aggHtml += `<span style="font-size: 14px; color: var(--text-secondary);">📊 综合评分 (动态权重)</span><br>`;
                 aggHtml += `<span style="font-size: 24px; font-weight: bold; color: ${aggColor};">${agg.prediction}</span> `;
-                aggHtml += `<span style="color: var(--text-secondary);">置信度 ${agg.confidence}</span>`;
+                aggHtml += `<span style="color: var(--text-secondary);">置信度 ${agg.confidence}%</span>`;
                 aggHtml += '</div>';
                 aggHtml += '<div style="text-align: right;">';
                 aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">看多 ${agg.buy_count} | 看空 ${agg.sell_count}</span><br>`;
                 aggHtml += `<span class="${aggAccClass}" style="font-size: 18px; font-weight: bold;">${agg.accuracy || '--'}</span>`;
+                if (wagg.buy_weight) {
+                    aggHtml += `<br><span style="font-size: 11px; color: var(--text-secondary);">权重: 多 ${wagg.buy_weight} vs 空 ${wagg.sell_weight}</span>`;
+                }
                 aggHtml += '</div></div></div>';
                 
                 // ---- 各指标独立卡片 ----
                 aggHtml += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px;">';
+                const weights = pa.indicator_weights || {};
                 pa.indicator_results.forEach(r => {
                     let predColor = r.prediction === '看涨' ? '#ff4d4f' : r.prediction === '看跌' ? '#52c41a' : '#8b949e';
                     let accClass = r.accuracy && r.accuracy.includes('正确') ? 'accuracy-correct' : 
-                                   r.accuracy.includes('错误') ? 'accuracy-wrong' :
+                                   r.accuracy && r.accuracy.includes('错误') ? 'accuracy-wrong' :
                                    r.accuracy === '参考' ? '' : 'accuracy-neutral';
                     let bgStyle = r.accuracy && r.accuracy.includes('正确') ? 'border-left: 3px solid #52c41a;' :
-                                  r.accuracy.includes('错误') ? 'border-left: 3px solid #ff4d4f;' : '';
+                                  r.accuracy && r.accuracy.includes('错误') ? 'border-left: 3px solid #ff4d4f;' : '';
+                    
+                    // 动态权重信息
+                    const w = weights[r.id];
+                    let weightBadge = '';
+                    if (w) {
+                        weightBadge = `<span style="font-size: 10px; color: var(--text-secondary);">胜率 ${w.accuracy}% | 权重 ${w.weight}%</span>`;
+                    }
                     
                     aggHtml += `<div style="background: var(--bg-tertiary); border-radius: 8px; padding: 10px; ${bgStyle}">`;
                     aggHtml += `<div style="display: flex; justify-content: space-between; align-items: start;">`;
@@ -479,7 +492,8 @@
                     aggHtml += `<span style="font-weight: bold; color: var(--accent-color);">${r.id}</span> `;
                     aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">${r.name}</span><br>`;
                     aggHtml += `<span style="font-size: 14px;">${r.value} ${r.unit}</span><br>`;
-                    aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">${r.signal}</span>`;
+                    aggHtml += `<span style="font-size: 12px; color: var(--text-secondary);">${r.signal}</span><br>`;
+                    aggHtml += weightBadge;
                     aggHtml += '</div>';
                     aggHtml += '<div style="text-align: right;">';
                     aggHtml += `<span style="color: ${predColor}; font-weight: bold;">${r.prediction}</span><br>`;
@@ -488,10 +502,35 @@
                 });
                 aggHtml += '</div>';
                 
+                // ---- 多窗口验证 ----
+                if (pa.comparison && pa.comparison.actual_windows) {
+                    const aw = pa.comparison.actual_windows;
+                    aggHtml += '<div style="margin-top:12px; padding:10px; background:var(--bg-tertiary); border-radius:8px; font-size:12px;">';
+                    aggHtml += '<strong style="color: var(--text-secondary);">📏 多窗口验证 (T+1 / T+3 / T+5)</strong><br>';
+                    ['d1','d3','d5'].forEach(w => {
+                        if (aw[w]) {
+                            const cls = aw[w].return >= 0 ? 'up' : 'down';
+                            const sn = aw[w].return >= 0 ? '+' : '';
+                            aggHtml += `<span style="margin-right:12px;">${w}日: <span class="${cls}">${sn}${aw[w].return}%</span> (${aw[w].trend})</span>`;
+                        }
+                    });
+                    aggHtml += '</div>';
+                }
+                
                 document.getElementById('pointPrediction').innerHTML = aggHtml;
 
-                // ---- 后续走势对比 ----
-                if (pa.comparison) {
+                // ---- 指标权重总览 ----
+                if (pa.indicator_weights && Object.keys(pa.indicator_weights).length > 0) {
+                    let whtml = '<strong style="color: var(--text-secondary);">📈 历史胜率 & 动态权重</strong>';
+                    whtml += '<table class="comparison-table"><thead><tr><th>指标</th><th>胜率</th><th>权重</th><th>样本</th></tr></thead><tbody>';
+                    Object.entries(pa.indicator_weights).forEach(([id, w]) => {
+                        const cls = w.accuracy >= 55 ? 'accuracy-correct' : w.accuracy < 45 ? 'accuracy-wrong' : '';
+                        whtml += `<tr><td>${id}</td><td class="${cls}">${w.accuracy}%</td><td>${w.weight}%</td><td>${w.samples}次</td></tr>`;
+                    });
+                    whtml += '</tbody></table>';
+                    document.getElementById('accuracyComparison').innerHTML = whtml;
+                } else if (pa.comparison) {
+                    // 后续实际走势
                     let compHtml = '<strong style="color: var(--text-secondary);">📉 后续实际走势</strong>';
                     compHtml += '<table class="comparison-table"><thead><tr><th>日期</th><th>收盘价</th><th>涨跌幅</th></tr></thead><tbody>';
                     pa.comparison.subsequent.forEach(s => {

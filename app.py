@@ -358,33 +358,36 @@ def point_analysis(code, date):
         current = klines[idx]
         prev = klines[idx - 1] if idx > 0 else current
         
-        # 后续数据用于验证准确性
-        future_data = klines[idx+1:idx+6]
+        # 后续数据用于多窗口验证
+        future_data = klines[idx+1:idx+11]
         start_price = current['close']
-        actual_trend = None
-        d1_ret = None
-        if len(future_data) > 0:
-            d1_ret = round((future_data[0]['close'] - start_price) / start_price * 100, 2)
-            if d1_ret > 0.5:
-                actual_trend = '上涨'
-            elif d1_ret < -0.5:
-                actual_trend = '下跌'
-            else:
-                actual_trend = '震荡'
         
-        # 后续走势数据
-        comparison = None
-        if len(future_data) > 0:
-            comparison = {
-                'start_price': start_price,
-                'subsequent': [{
-                    'date': f['date'],
-                    'close': f['close'],
-                    'change_pct': round((f['close'] - start_price) / start_price * 100, 2)
-                } for f in future_data[:5]],
-                'actual_trend': actual_trend,
-                'd1_return_pct': d1_ret,
-            }
+        # 多窗口实际走势
+        actual_windows = {}
+        comparison = {'start_price': start_price, 'windows': {}, 'subsequent': []}
+        
+        for days, label in [(1, 'd1'), (3, 'd3'), (5, 'd5')]:
+            if idx + days < len(klines):
+                ret = round((klines[idx+days]['close'] - start_price) / start_price * 100, 2)
+                if ret > 1.0:
+                    trend = '上涨'
+                elif ret < -1.0:
+                    trend = '下跌'
+                else:
+                    trend = '震荡'
+                actual_windows[label] = {'return': ret, 'trend': trend}
+        
+        # 默认用 d3 验证
+        actual_trend = actual_windows.get('d3', {}).get('trend') if actual_windows else None
+        
+        # 后续走势数据（用于前端展示）
+        for f in future_data[:5]:
+            comparison['subsequent'].append({
+                'date': f['date'],
+                'close': f['close'],
+                'change_pct': round((f['close'] - start_price) / start_price * 100, 2)
+            })
+        comparison['actual_windows'] = actual_windows
         
         # ---- 每个指标独立分析 ----
         indicator_results = []
@@ -552,26 +555,33 @@ def point_analysis(code, date):
                 'prediction': '--', 'actual': actual_trend, 'accuracy': '参考'
             })
         
-        # ---- 汇总评分 ----
+        # ---- 汇总评分 (动态权重) ----
+        # 在整个K线序列上回测，得到每个指标的准确率和权重
+        weights = compute_indicator_weights(klines)
+        
+        # 提取各指标准确率（用于前端展示）
+        indicator_weights = {}
+        for ind_id, win_stats in weights.items():
+            for win_name, s in win_stats.items():
+                if 'accuracy' in s and 'weight' in s:
+                    k = f"{ind_id}"
+                    indicator_weights[k] = {
+                        'accuracy': s['accuracy'],
+                        'weight': round(s['weight'] * 100),
+                        'samples': s['total'],
+                        'correct': s['correct'],
+                        'window': win_name,
+                    }
+        
+        # 等权重汇总（简单多数）
         buy_count = sum(1 for r in indicator_results if r['prediction'] == '看涨')
         sell_count = sum(1 for r in indicator_results if r['prediction'] == '看跌')
-        total = buy_count + sell_count
         
-        if total > 0:
-            if buy_count > sell_count:
-                agg_pred = '看涨'
-                agg_conf = min(100, 50 + (buy_count - sell_count) * (50 // max(total, 1)))
-            elif sell_count > buy_count:
-                agg_pred = '看跌'
-                agg_conf = min(100, 50 + (sell_count - buy_count) * (50 // max(total, 1)))
-            else:
-                agg_pred = '震荡'
-                agg_conf = 50
-        else:
-            agg_pred = '--'
-            agg_conf = 0
+        # 动态权重汇总
+        pa = {'indicator_results': indicator_results}
+        wagg = weighted_aggregate(pa, weights)
         
-        agg_acc = judge_accuracy(agg_pred, actual_trend) if agg_pred != '--' else '--'
+        agg_acc = judge_accuracy(wagg['prediction'], actual_trend) if wagg['prediction'] != '--' else '--'
         
         return jsonify({
             'code': code,
@@ -582,10 +592,20 @@ def point_analysis(code, date):
                 'buy_count': buy_count,
                 'sell_count': sell_count,
                 'neutral_count': len(indicator_results) - buy_count - sell_count,
-                'prediction': agg_pred,
-                'confidence': agg_conf,
+                'prediction': wagg['prediction'],
+                'confidence': wagg['confidence'],
                 'accuracy': agg_acc,
             },
+            'weighted_aggregate': {
+                'prediction': wagg['prediction'],
+                'confidence': wagg['confidence'],
+                'buy_weight': wagg['buy_weight'],
+                'sell_weight': wagg['sell_weight'],
+                'buy_pct': wagg.get('buy_pct', 0),
+                'sell_pct': wagg.get('sell_pct', 0),
+                'accuracy': agg_acc,
+            },
+            'indicator_weights': indicator_weights,
             'comparison': comparison,
         })
     except Exception as e:
@@ -604,6 +624,175 @@ def judge_accuracy(prediction, actual):
         return '中性'
     else:
         return '错误 ❌'
+
+
+def get_indicator_predictions(current, prev):
+    """对单根K线，返回所有可计算指标的预测字典 {id: prediction}"""
+    preds = {}
+    
+    # MA — 收盘价 vs MA20
+    if current.get('MA20') is not None:
+        preds['MA'] = '看涨' if current['close'] > current['MA20'] else '看跌'
+    
+    # MACD — DIF vs DEA
+    if current.get('MACD') is not None and current.get('MACD_SIGNAL') is not None:
+        preds['MACD'] = '看涨' if current['MACD'] > current['MACD_SIGNAL'] else '看跌'
+    
+    # KDJ — K vs D
+    if current.get('K') is not None and current.get('D') is not None:
+        preds['KDJ'] = '看涨' if current['K'] > current['D'] else '看跌'
+    
+    # RSI — vs 50
+    if current.get('RSI') is not None:
+        preds['RSI'] = '看涨' if current['RSI'] > 50 else '看跌'
+    
+    # BOLL — 收盘价 vs 中轨
+    if current.get('BOLL_MID') is not None:
+        preds['BOLL'] = '看涨' if current['close'] > current['BOLL_MID'] else '看跌'
+    
+    # OBV — 变化方向
+    if current.get('OBV') is not None and prev.get('OBV') is not None:
+        preds['OBV'] = '看涨' if current['OBV'] > prev['OBV'] else '看跌'
+    
+    # WR — vs -50
+    if current.get('WR') is not None:
+        preds['WR'] = '看涨' if current['WR'] > -50 else '看跌'
+    
+    # CCI — vs 0
+    if current.get('CCI') is not None:
+        preds['CCI'] = '看涨' if current['CCI'] > 0 else '看跌'
+    
+    # BIAS — BIAS6 vs 0
+    if current.get('BIAS6') is not None:
+        preds['BIAS'] = '看涨' if current['BIAS6'] > 0 else '看跌'
+    
+    # PSY — vs 50
+    if current.get('PSY') is not None:
+        preds['PSY'] = '看涨' if current['PSY'] > 50 else '看跌'
+    
+    # VR — vs 150
+    if current.get('VR') is not None:
+        preds['VR'] = '看涨' if current['VR'] > 150 else '看跌'
+    
+    return preds
+
+
+def compute_indicator_weights(klines, min_samples=30):
+    """在全部K线数据上回测每个指标的准确率，3天窗口验证。
+    返回 {indicator_id: {correct, total, accuracy, weight}} 和加权后的信号计数。"""
+    from collections import defaultdict
+    
+    # 各窗口验证期（天数）
+    windows = {
+        'd3': 3,   # 3天累计收益
+    }
+    
+    # 累计统计: stats[indicator][window] = {'correct': N, 'total': N}
+    stats = defaultdict(lambda: defaultdict(lambda: {'correct': 0, 'total': 0}))
+    
+    n = len(klines)
+    # 指标需要60天预热（MA60 才稳定），从第61天开始回测
+    start = 60
+    end = n - max(windows.values())  # 需要足够未来数据
+    
+    for i in range(start, end):
+        current = klines[i]
+        prev = klines[i - 1]
+        preds = get_indicator_predictions(current, prev)
+        
+        start_price = current['close']
+        
+        for win_name, win_days in windows.items():
+            future_idx = i + win_days
+            if future_idx >= n:
+                continue
+            end_price = klines[future_idx]['close']
+            ret = (end_price - start_price) / start_price * 100
+            
+            if ret > 1.0:
+                actual = '上涨'
+            elif ret < -1.0:
+                actual = '下跌'
+            else:
+                actual = '震荡'
+            
+            mapping = {'看涨': '上涨', '看跌': '下跌', '震荡': '震荡'}
+            for ind_id, pred in preds.items():
+                stats[ind_id][win_name]['total'] += 1
+                if mapping.get(pred) == actual:
+                    stats[ind_id][win_name]['correct'] += 1
+    
+    # 计算准确率和权重
+    weights = {}
+    total_accuracy = 0.0
+    count = 0
+    
+    for ind_id, win_stats in stats.items():
+        for win_name, s in win_stats.items():
+            if s['total'] >= min_samples:
+                acc = round(s['correct'] / s['total'] * 100, 1)
+                s['accuracy'] = acc
+                total_accuracy += acc
+                count += 1
+    
+    # 归一化权重
+    avg_acc = total_accuracy / count if count > 0 else 0
+    
+    for ind_id, win_stats in stats.items():
+        for win_name, s in win_stats.items():
+            if 'accuracy' in s:
+                # 至少给 10% 权重，避免极端指标权重为 0
+                s['weight'] = round(max(10, s['accuracy']) / 100, 3)
+    
+    return stats
+
+
+def weighted_aggregate(pa_result, weights):
+    """用动态权重重新计算汇总评分"""
+    buy_weight = 0.0
+    sell_weight = 0.0
+    total_weight = 0.0
+    
+    for r in pa_result.get('indicator_results', []):
+        ind_id = r['id']
+        w = 1.0  # 等权重兜底
+        # 取 d3 窗口权重
+        if ind_id in weights and 'd3' in weights[ind_id] and 'weight' in weights[ind_id]['d3']:
+            w = weights[ind_id]['d3']['weight']
+        
+        if r['prediction'] == '看涨':
+            buy_weight += w
+        elif r['prediction'] == '看跌':
+            sell_weight += w
+        total_weight += w
+    
+    if total_weight > 0:
+        buy_pct = round(buy_weight / total_weight * 100)
+        sell_pct = round(sell_weight / total_weight * 100)
+        
+        if buy_pct > 55:
+            agg_pred = '看涨'
+            agg_conf = buy_pct
+        elif sell_pct > 55:
+            agg_pred = '看跌'
+            agg_conf = sell_pct
+        else:
+            agg_pred = '震荡'
+            agg_conf = max(buy_pct, sell_pct)
+    else:
+        agg_pred = '--'
+        agg_conf = 0
+        buy_pct = 0
+        sell_pct = 0
+    
+    return {
+        'prediction': agg_pred,
+        'confidence': agg_conf,
+        'buy_weight': round(buy_weight, 2),
+        'sell_weight': round(sell_weight, 2),
+        'buy_pct': buy_pct,
+        'sell_pct': sell_pct,
+    }
 
 
 def analyze_signals_at_point(current, prev):
